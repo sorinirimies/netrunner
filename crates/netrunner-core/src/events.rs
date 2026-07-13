@@ -2,7 +2,7 @@
 //!
 //! The core crate contains **no UI code**. Instead, long-running operations
 //! report their progress by sending [`TestEvent`]s over a Tokio
-//! [`mpsc::UnboundedSender`]. Front-ends (the Ratatui CLI and the GPUI desktop
+//! [`tokio::sync::mpsc::UnboundedSender`]. Front-ends (the Ratatui CLI and the GPUI desktop
 //! app) subscribe to these events and render them however they like — the CLI
 //! reproduces its cyberpunk bandwidth graphs, while the GUI feeds live
 //! download/upload charts.

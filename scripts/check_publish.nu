@@ -43,7 +43,7 @@ def main [] {
     # ─────────────────────────────────────────────────────────────────────────
     print $"($cyan)[2/8]($reset) Running clippy \(--all-targets --all-features -D warnings -A deprecated\) …"
     let clippy = (
-        do { run-external "cargo" "clippy" "--all-targets" "--all-features" "--" "-D" "warnings" "-A" "deprecated" }
+        do { run-external "cargo" "clippy" "--workspace" "--exclude" "netrunner" "--all-targets" "--all-features" "--" "-D" "warnings" "-A" "deprecated" }
         | complete
     )
     if $clippy.exit_code != 0 {
@@ -58,7 +58,7 @@ def main [] {
     # ─────────────────────────────────────────────────────────────────────────
     print $"($cyan)[3/8]($reset) Running tests \(--all-features --all-targets\) …"
     let tests = (
-        do { run-external "cargo" "test" "--all-features" "--all-targets" }
+        do { run-external "cargo" "test" "--workspace" "--exclude" "netrunner" "--all-features" "--all-targets" }
         | complete
     )
     if $tests.exit_code != 0 {
@@ -105,9 +105,9 @@ def main [] {
     # Check 6 — Package version
     # ─────────────────────────────────────────────────────────────────────────
     print $"($cyan)[6/8]($reset) Checking package version …"
-    let version = (open Cargo.toml | get package.version)
+    let version = (open Cargo.toml | get workspace.package.version)
     if ($version | is-empty) {
-        print $"  ($red)✘ Could not read package.version from Cargo.toml($reset)"
+        print $"  ($red)✘ Could not read workspace.package.version from Cargo.toml($reset)"
         $errors = $errors + 1
     } else {
         print $"  ($green)✔ Package version: ($yellow)($version)($reset)"
@@ -127,9 +127,9 @@ def main [] {
     # ─────────────────────────────────────────────────────────────────────────
     # Check 8 — cargo publish --dry-run
     # ─────────────────────────────────────────────────────────────────────────
-    print $"($cyan)[8/8]($reset) Running cargo publish --dry-run --allow-dirty …"
+    print $"($cyan)[8/8]($reset) Running cargo publish --dry-run for netrunner-core …"
     let dry_run = (
-        do { run-external "cargo" "publish" "--dry-run" "--allow-dirty" }
+        do { run-external "cargo" "publish" "-p" "netrunner-core" "--dry-run" "--allow-dirty" }
         | complete
     )
     if $dry_run.exit_code != 0 {
@@ -150,7 +150,8 @@ def main [] {
         print ""
         print $"($cyan)Next steps:($reset)"
         print $"  Bump version and tag:    ($yellow)nu scripts/bump_version.nu ($version)($reset)"
-        print $"  Publish to crates.io:    ($yellow)cargo publish($reset)"
+        print $"  Publish core crate:      ($yellow)cargo publish -p netrunner-core($reset)"
+        print $"  Then the CLI:            ($yellow)cargo publish -p netrunner_cli($reset)"
         print ""
     } else {
         print $"($red)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━($reset)"

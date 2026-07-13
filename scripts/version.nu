@@ -2,4 +2,4 @@
 # Prints the current package version from Cargo.toml.
 # Usage: nu scripts/version.nu
 
-open Cargo.toml | get package.version | print
+open Cargo.toml | get workspace.package.version | print

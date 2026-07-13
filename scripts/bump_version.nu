@@ -24,7 +24,7 @@ def main [
     }
 
     # ── Read current version ──────────────────────────────────────────────────
-    let current_version = (open Cargo.toml | get package.version)
+    let current_version = (open Cargo.toml | get workspace.package.version)
     let tag_name = $"v($new_version)"
 
     print $"($cyan)netrunner_cli version bump($reset)"
@@ -54,8 +54,13 @@ def main [
     # Step 1/8 — Update Cargo.toml
     # ─────────────────────────────────────────────────────────────────────────
     print $"($cyan)[1/8]($reset) Updating Cargo.toml …"
+    # Bump both the [workspace.package] version (first `^version = "..."`) and
+    # the internal `netrunner-core` path-dependency pin so member crates keep
+    # resolving each other. Inline third-party `{ version = "..." }` entries are
+    # left untouched (they don't start a line).
     let cargo_toml = (open --raw Cargo.toml
-        | str replace --regex '(?m)^version = "[^"]*"' $"version = \"($new_version)\"")
+        | str replace --regex '(?m)^version = "[^"]*"' $"version = \"($new_version)\""
+        | str replace --all --regex 'netrunner-core = \{ path = "crates/netrunner-core", version = "[^"]*" \}' $"netrunner-core = { path = \"crates/netrunner-core\", version = \"($new_version)\" }")
     $cargo_toml | save --force Cargo.toml
     print $"  ($green)✔ Cargo.toml updated($reset)"
 

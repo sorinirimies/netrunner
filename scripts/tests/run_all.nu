@@ -78,7 +78,7 @@ if $output_is_semver {
 report $"version.nu output is valid semver: '($script_output)'" $output_is_semver $"'($script_output)' does not match semver regex"
 
 # 1d — output matches Cargo.toml package.version
-let cargo_version = (open Cargo.toml | get package.version)
+let cargo_version = (open Cargo.toml | get workspace.package.version)
 let versions_match = ($script_output == $cargo_version)
 if $versions_match {
     $passed += 1

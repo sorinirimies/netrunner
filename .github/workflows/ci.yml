@@ -45,10 +45,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: Run clippy action
-        uses: clechasseur/rs-clippy-check@v4
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+      # The GPUI desktop crate (`netrunner`) needs a graphical toolchain that is
+      # not available on the headless Linux runner; it is linted/tested on macOS.
+      - name: Run clippy (core + CLI)
+        run: cargo clippy --workspace --exclude netrunner --all-targets --all-features -- -D warnings -A deprecated
   doc:
     # run docs generation on nightly rather than stable. This enables features like
     # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
@@ -60,7 +62,7 @@ jobs:
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
       - name: Run cargo doc
-        run: cargo doc --no-deps --all-features
+        run: cargo doc --no-deps --all-features --workspace --exclude netrunner
         env:
           RUSTDOCFLAGS: --cfg docsrs
   test:
@@ -84,10 +86,24 @@ jobs:
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
-      - name: cargo test --locked
-        run: cargo test --locked --all-features --all-targets
+      - name: cargo test --locked (core + CLI)
+        run: cargo test --locked --all-features --workspace --exclude netrunner --all-targets
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@v2
+
+  test-gui:
+    # The GPUI desktop app builds natively on macOS (Metal); its pure state
+    # machine is unit-tested here without opening a window.
+    name: test-gui (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: cargo test -p netrunner
+        run: cargo test --locked -p netrunner
 
   test-nu:
     name: test-nu

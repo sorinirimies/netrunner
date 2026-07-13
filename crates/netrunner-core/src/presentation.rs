@@ -1,9 +1,9 @@
 //! Shared, UI-agnostic presentation helpers.
 //!
-//! The cyberpunk colour palette and the mapping from [`ConnectionQuality`] to a
+//! The cyberpunk colour palette and the mapping from [`ConnectionQuality`](crate::types::ConnectionQuality) to a
 //! colour are the same across the Ratatui TUI and the GPUI desktop app. Rather
 //! than duplicate the RGB values in every front-end, we define them **once**
-//! here and expose the [`quality_color_fn!`] macro so each front-end can
+//! here and expose the [`quality_color_fn!`](crate::quality_color_fn) macro so each front-end can
 //! generate a mapping function for *its own* colour type without depending on
 //! any UI crate.
 
@@ -25,9 +25,9 @@ pub mod palette {
     pub const DIM: (u8, u8, u8) = (0x50, 0x50, 0x64);
 }
 
-/// Return the canonical `(r, g, b)` colour for a [`ConnectionQuality`].
+/// Return the canonical `(r, g, b)` colour for a [`ConnectionQuality`](crate::types::ConnectionQuality).
 ///
-/// This is the single source of truth used by [`quality_color_fn!`].
+/// This is the single source of truth used by [`quality_color_fn!`](crate::quality_color_fn).
 pub const fn quality_rgb(quality: crate::types::ConnectionQuality) -> (u8, u8, u8) {
     use crate::types::ConnectionQuality::*;
     match quality {
@@ -40,7 +40,7 @@ pub const fn quality_rgb(quality: crate::types::ConnectionQuality) -> (u8, u8, u
     }
 }
 
-/// Generate a function mapping [`ConnectionQuality`] to a front-end colour type.
+/// Generate a function mapping [`ConnectionQuality`](crate::types::ConnectionQuality) to a front-end colour type.
 ///
 /// The colour is built from the canonical palette in [`quality_rgb`], so the
 /// TUI and GUI stay perfectly in sync. Pass any constructor callable as
