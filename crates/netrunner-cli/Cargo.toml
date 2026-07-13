@@ -1,0 +1,56 @@
+[package]
+name = "netrunner_cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "A feature-rich Rust-based CLI to test and analyze your internet connection"
+readme = "README.md"
+keywords = ["cli", "network", "internet", "speed-test", "diagnostics"]
+categories = ["command-line-utilities", "network-programming"]
+exclude = [
+    "examples/vhs/target/*.gif",
+    "examples/vhs/",
+    "results.json",
+]
+
+[[bin]]
+name = "netrunner_cli"
+path = "src/main.rs"
+
+[lib]
+name = "netrunner_cli"
+path = "src/lib.rs"
+
+[dependencies]
+netrunner-core = { workspace = true }
+tokio = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+rand = { workspace = true }
+clap = { workspace = true }
+indicatif = { workspace = true }
+colored = { workspace = true }
+console = { workspace = true }
+dialoguer = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tachyonfx = { workspace = true }
+humantime = { workspace = true }
+spinners = { workspace = true }
+byte-unit = { workspace = true }
+ctrlc = { workspace = true }
+color-eyre = { workspace = true }
+prettytable-rs = { workspace = true }
+ratatui-widgets = { workspace = true }
+tui-piechart = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = { workspace = true }
+rustls = { workspace = true }

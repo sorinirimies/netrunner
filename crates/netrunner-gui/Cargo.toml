@@ -1,0 +1,27 @@
+[package]
+name = "netrunner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "netrunner — desktop internet speed-test & network diagnostics app (Zed GPUI) with live download/upload charts"
+readme = "README.md"
+keywords = ["network", "speed-test", "gui", "gpui", "bandwidth"]
+categories = ["gui", "visualization"]
+
+[[bin]]
+name = "netrunner"
+path = "src/main.rs"
+
+[lib]
+name = "netrunner_gui"
+path = "src/lib.rs"
+
+[dependencies]
+netrunner-core = { workspace = true }
+tokio = { workspace = true }
+rustls = { workspace = true }
+futures = { workspace = true }
+gpui = { workspace = true }

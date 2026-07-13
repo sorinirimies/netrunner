@@ -1,12 +1,26 @@
-# Netrunner CLI 🚀
+# Netrunner 🚀
 
-A high-performance, cyberpunk-styled network diagnostics and speed testing tool built in Rust.
+A high-performance, cyberpunk-styled network diagnostics and speed testing
+toolkit built in Rust. Netrunner is a Cargo **workspace** with a shared core
+engine and two front-ends:
+
+| Crate | Path | What it is |
+|-------|------|------------|
+| [`netrunner-core`](crates/netrunner-core) | `crates/netrunner-core` | Framework-free speed-test & diagnostics engine (no UI). Reports progress via `TestEvent`s. |
+| [`netrunner_cli`](crates/netrunner-cli) | `crates/netrunner-cli` | The cyberpunk **terminal** app (Ratatui/indicatif). Published to crates.io as `netrunner_cli`. |
+| [`netrunner`](crates/netrunner-gui) | `crates/netrunner-gui` | The **desktop** app built on [Zed GPUI](https://www.gpui.rs/) with live download/upload charts. |
+
+```sh
+cargo run -p netrunner_cli      # terminal app
+cargo run -p netrunner          # GPUI desktop app (live charts)
+```
+
+All network logic lives in `netrunner-core`; both front-ends subscribe to the
+same event stream, so behaviour stays identical across the TUI and GUI.
 
 [![Crates.io](https://img.shields.io/crates/v/netrunner_cli)](https://crates.io/crates/netrunner_cli)
 [![Documentation](https://docs.rs/netrunner_cli/badge.svg)](https://docs.rs/netrunner_cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Release](https://github.com/sorinirimies/netrunner_cli/actions/workflows/release.yml/badge.svg)](https://github.com/sorinirimies/netrunner_cli/actions/workflows/release.yml)
-[![CI](https://github.com/sorinirimies/netrunner_cli/actions/workflows/ci.yml/badge.svg)](https://github.com/sorinirimies/netrunner_cli/actions/workflows/ci.yml)
 
 ## Preview
 
@@ -311,6 +325,39 @@ Netrunner provides a comprehensive assessment based on multiple metrics:
 
 ## 🏗️ Architecture
 
+### Workspace layout
+
+Netrunner is a Cargo workspace. All network/business logic lives in a UI-free
+core crate that both front-ends share:
+
+```
+netrunner/
+├── crates/
+│   ├── netrunner-core/   # lib `netrunner_core` — engine, no UI deps
+│   │   ├── types.rs         domain models (results, servers, config, quality)
+│   │   ├── speed_test.rs     geolocation, server discovery, measurement
+│   │   ├── diagnostics.rs    gateway/DNS/route/IPv6 diagnostics
+│   │   ├── history.rs        redb history storage & statistics
+│   │   ├── events.rs         `TestEvent` progress stream (UI-agnostic)
+│   │   └── presentation.rs   canonical palette + `quality_color_fn!` macro
+│   ├── netrunner-cli/    # bin `netrunner_cli` — Ratatui/indicatif TUI
+│   └── netrunner-gui/    # bin `netrunner` — Zed GPUI desktop app + live charts
+```
+
+**Engine ⇄ UI decoupling.** The core engine never prints. It reports progress
+by emitting [`TestEvent`]s over a Tokio channel
+(`SpeedTest::with_events(config, Some(tx))`). Each front-end subscribes:
+
+- the **TUI** re-drives its cyberpunk bandwidth graphs from `DownloadSample` /
+  `UploadSample` events;
+- the **GUI** runs the Tokio engine on a background runtime thread, bridges the
+  events into GPUI's executor, and animates live download/upload bar charts.
+
+Because both consume the *same* event stream, behaviour stays identical across
+interfaces. Shared presentation (e.g. the connection-quality colour mapping) is
+defined **once** in the core `quality_color_fn!` macro and instantiated by each
+front-end for its own colour type (Ratatui `Color`, GPUI `Rgba`).
+
 ### High-Speed Testing Strategy
 
 Netrunner is optimized for modern high-speed connections:
@@ -607,71 +654,54 @@ netrunner history --stats
 
 ```bash
 # Clone the repository
-git clone https://github.com/sorinirimies/netrunner_cli.git
-cd netrunner_cli
+git clone https://github.com/sorinirimies/netrunner.git
+cd netrunner
 
-# Build in debug mode
+# Build everything (all crates)
 cargo build
 
-# Build in release mode (optimized)
+# Build a specific front-end
+cargo build -p netrunner_cli      # terminal app
+cargo build -p netrunner          # GPUI desktop app
+
+# Optimised release binaries
 cargo build --release
 
-# Run tests
-cargo test
-
-# Run with logging
-RUST_LOG=debug cargo run
+# Run
+cargo run -p netrunner_cli        # TUI
+cargo run -p netrunner            # GUI (live charts)
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests
-cargo test
+# Every crate in the workspace
+cargo test --workspace
 
-# Run specific test module
-cargo test speed_test
+# A single crate
+cargo test -p netrunner-core
+cargo test -p netrunner_cli
+cargo test -p netrunner            # GUI state-machine tests
 
-# Run with output
-cargo test -- --nocapture
-
-# Run integration tests
-cargo test --test '*'
+# With output
+cargo test --workspace -- --nocapture
 ```
 
 ### Project Structure
 
 ```
-netrunner_cli/
-├── src/
-│   ├── main.rs                  # CLI entry point
-│   ├── lib.rs                   # Library exports
-│   └── modules/
-│       ├── speed_test.rs        # Speed testing implementation
-│       ├── history.rs           # History storage with redb + postcard
-│       ├── diagnostics.rs       # Network diagnostics
-│       ├── intro.rs             # Animated intro screen
-│       ├── logo.rs              # ASCII logo rendering
-│       ├── stats_ui.rs          # Statistics dashboard (tui-piechart)
-│       ├── ui.rs                # UI components and gauges
-│       └── types.rs             # Shared types and traits
-├── examples/
-│   ├── basic_speed_test.rs      # Programmatic speed test
-│   ├── continuous_monitoring.rs # Continuous monitoring loop
-│   ├── custom_configuration.rs  # Custom server/config usage
-│   ├── history_management.rs    # History CRUD operations
-│   ├── logo_demo.rs             # Logo rendering demo
-│   ├── statistics_dashboard.rs  # Interactive statistics TUI ← new
-│   └── vhs/
-│       ├── speed-test.tape               # VHS tape → speed-test.gif
-│       ├── speed-test-history.tape       # VHS tape → history.gif
-│       ├── statistics-dashboard.tape     # VHS tape → statistics-dashboard.gif ← new
-│       └── target/                       # Generated GIFs (Git LFS)
-│           ├── speed-test.gif
-│           ├── history.gif
-│           └── statistics-dashboard.gif
-├── tests/                       # Integration tests
-└── Cargo.toml                   # Project dependencies
+netrunner/                        # workspace root (published crates: netrunner-core, netrunner_cli, netrunner)
+├── Cargo.toml                    # [workspace] + shared package/dependency pins
+├── crates/
+│   ├── netrunner-core/           # shared, UI-free engine (lib `netrunner_core`)
+│   │   └── src/{types,speed_test,diagnostics,history,events,presentation}.rs
+│   ├── netrunner-cli/            # Ratatui TUI (bin `netrunner_cli`)
+│   │   ├── src/{main,lib,render,ui,intro,logo,stats_ui}.rs
+│   │   ├── examples/             # programmatic usage + VHS tapes
+│   │   └── tests/                # packaging/weight tests
+│   └── netrunner-gui/            # Zed GPUI desktop app (bin `netrunner`)
+│       └── src/{main,lib,app,view,theme,engine}.rs
+└── crates/netrunner-core/tests/  # engine integration tests
 ```
 
 ## 🤝 Contributing

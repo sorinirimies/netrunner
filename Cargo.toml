@@ -1,66 +1,72 @@
-[package]
-name = "netrunner_cli"
+[workspace]
+members = [
+    "crates/netrunner-core",
+    "crates/netrunner-cli",
+    "crates/netrunner-gui",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.7.3"
 edition = "2021"
 authors = ["Sorin Albu-Irimies <mihaiirimies@gmail.com>"]
-description = "A feature-rich Rust-based CLI to test and analyze your internet connection"
-readme = "README.md"
-homepage = "https://github.com/sorinirimies/netrunner_cli"
-repository = "https://github.com/sorinirimies/netrunner_cli"
 license = "MIT"
-keywords = ["cli", "network", "internet", "speed-test", "diagnostics"]
-categories = ["command-line-utilities", "network-programming"]
-exclude = [
-    "examples/vhs/target/*.gif",
-    "examples/vhs/",
-    "scripts/",
-    "results.json",
-    ".gitea/",
-    ".github/",
-    "cliff.toml",
-    "justfile",
-]
+homepage = "https://github.com/sorinirimies/netrunner"
+repository = "https://github.com/sorinirimies/netrunner"
 
-[dependencies]
-clap = { version = "4.6", features = ["derive"] }
+# ── Shared dependency versions ────────────────────────────────────────────────
+# Single source of truth — crates reference these with `{ workspace = true }`.
+[workspace.dependencies]
+# Core / shared
 tokio = { version = "1.50", features = ["full"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls-no-provider", "charset", "http2", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-indicatif = "0.18"
 chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+strum = { version = "0.28", features = ["derive"] }
+strum_macros = "0.28"
+rand = "0.10"
+dns-lookup = "3.0"
+redb = "4"
+postcard = { version = "1.1", features = ["use-std"] }
+dirs = "6.0"
+
+# TUI (netrunner-cli)
+clap = { version = "4.6", features = ["derive"] }
+indicatif = "0.18"
 colored = "3.0"
-color-eyre = "0.6"
 console = "0.16"
 dialoguer = "0.12"
-dirs = "6.0"
 ratatui = "0.30"
 crossterm = "0.29"
 tachyonfx = "0.25"
-rand = "0.10"
 humantime = "2.3"
 spinners = "4.2"
-dns-lookup = "3.0"
-redb = "4"
 byte-unit = "5.0"
-postcard = { version = "1.1", features = ["use-std"] }
 ctrlc = "3.5"
-strum = { version = "0.28", features = ["derive"] }
-strum_macros = "0.28"
-futures = "0.3"
 async-trait = "0.1"
 prettytable-rs = "0.10"
 ratatui-widgets = "0.3"
 tui-piechart = "0.3.1"
+color-eyre = "0.6"
 
-[dev-dependencies]
+# GUI (netrunner-gui)
+gpui = "0.2"
+
+# Internal crates
+netrunner-core = { path = "crates/netrunner-core", version = "0.7.3" }
+
+# Dev
 tempfile = "3.8"
 tokio-test = "0.4"
+
+[profile.dev]
+opt-level = 0
 
 [profile.release]
 strip = true
 lto = true
 codegen-units = 1
-panic = "abort"
 opt-level = "z"
