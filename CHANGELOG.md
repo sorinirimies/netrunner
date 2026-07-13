@@ -2,12 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## 0.8.0 - 2026-07-13
+## 1.0.0 - 2026-07-13
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v0.7.3
 ### 📦 Other Changes
 - feat!: split netrunner into a Cargo workspace (core + TUI + GPUI GUI)
-**Full Changelog**: https://github.com/sorinirimies/netrunner_cli/compare/v0.7.3...v0.8.0
+### 🔄 CI
+- ci: make workspace CI green (GPUI on macOS, scripts workspace-aware)
+### 🔧 Chores
+- chore(release): v0.8.0
+**Full Changelog**: https://github.com/sorinirimies/netrunner_cli/compare/v0.7.3...v1.0.0
 ## 0.7.3 - 2026-04-05
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v0.7.1
