@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - ci: make workspace CI green (GPUI on macOS, scripts workspace-aware)
 ### 🔧 Chores
 - chore(release): v0.8.0
+- chore(release): v1.0.0
 **Full Changelog**: https://github.com/sorinirimies/netrunner_cli/compare/v0.7.3...v1.0.0
 ## 0.7.3 - 2026-04-05
 ### 📚 Documentation
