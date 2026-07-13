@@ -124,14 +124,14 @@ cargo install netrunner_cli
 ### From Source
 
 ```bash
-git clone https://github.com/sorinirimies/netrunner_cli.git
+git clone https://github.com/sorinirimies/netrunner.git
 cd netrunner_cli
 cargo install --path .
 ```
 
 ### Binary Releases
 
-Download pre-built binaries from the [Releases](https://github.com/sorinirimies/netrunner_cli/releases) page.
+Download pre-built binaries from the [Releases](https://github.com/sorinirimies/netrunner/releases) page.
 
 ## 🚀 Quick Start
 
@@ -740,7 +740,7 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## 🐛 Bug Reports
 
-Found a bug? Please [open an issue](https://github.com/sorinirimies/netrunner_cli/issues) with:
+Found a bug? Please [open an issue](https://github.com/sorinirimies/netrunner/issues) with:
 - Your OS and terminal emulator
 - Steps to reproduce
 - Expected vs actual behavior
@@ -748,7 +748,7 @@ Found a bug? Please [open an issue](https://github.com/sorinirimies/netrunner_cl
 
 ## 💡 Feature Requests
 
-Have an idea? [Open an issue](https://github.com/sorinirimies/netrunner_cli/issues) with the `enhancement` label!
+Have an idea? [Open an issue](https://github.com/sorinirimies/netrunner/issues) with the `enhancement` label!
 
 ## 📊 Project Stats
 

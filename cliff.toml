@@ -22,7 +22,7 @@ body = """
 
 {% endfor -%}
 {% if version and previous.version -%}
-**Full Changelog**: https://github.com/sorinirimies/netrunner_cli/compare/{{ previous.version }}...{{ version }}
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/{{ previous.version }}...{{ version }}
 {% endif -%}
 """
 # remove the leading and trailing whitespace from the template
