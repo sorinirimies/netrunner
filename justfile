@@ -407,13 +407,17 @@ release-all version: (bump version)
         echo "✅ Release v{{ version }} pushed to GitHub and Gitea!"
     fi
 
-# Re-trigger the Release workflow for an EXISTING tag (deletes + re-pushes it).
-# Handy after fixing a secret (e.g. CRATES_IO_TOKEN) so the tag runs again.
+# Re-trigger the Release workflow for an EXISTING tag via manual dispatch.
+# Uses workflow_dispatch (reliable) — handy after fixing a secret such as
+# CRATES_IO_TOKEN. Requires the GitHub CLI (gh).
 release-retrigger version:
-    @echo "Re-triggering Release workflow for v{{ version }}…"
-    -git push origin :refs/tags/v{{ version }}
-    git push origin v{{ version }}
-    @echo "✅ Re-pushed tag v{{ version }} — the Release workflow will run again."
+    @command -v gh >/dev/null 2>&1 || { \
+        echo "❌ GitHub CLI (gh) not found. Install from https://cli.github.com"; exit 1; \
+    }
+    @echo "Dispatching Release workflow for tag v{{ version }}…"
+    gh workflow run release.yml --field tag=v{{ version }}
+    @echo "✅ Dispatched — check progress at:"
+    @echo "   https://github.com/$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions"
 
 # Force-sync Gitea with GitHub
 sync-gitea:

@@ -4,107 +4,186 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+        default: ""
 
 permissions:
   contents: write
-  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
+  # ── 0. Validate & resolve the tag ─────────────────────────────────────────────
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Resolve and validate tag
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Tag '${TAG}' does not match vX.Y.Z — aborting."
+            exit 1
+          fi
+          echo "tag=${TAG}"           >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}"     >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG}"
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo fmt --all -- --check
-
-      - name: Run clippy
-        run: cargo clippy --workspace --exclude netrunner --all-targets -- -D warnings -A deprecated
-
-      - name: Run tests
-        run: cargo test --all-features --workspace --exclude netrunner
-
-  build:
-    name: Build and release
-    needs: test
+  # ── 1. Quality gate (headless: core + CLI, no GPUI) ───────────────────────────
+  test:
+    name: Test & lint
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy (core + CLI)
+        run: cargo clippy --workspace --exclude netrunner --all-targets -- -D warnings -A deprecated
+      - name: Test (core + CLI)
+        run: cargo test --all-features --workspace --exclude netrunner
+
+  # ── 2. Build the CLI binary & create the GitHub Release ───────────────────────
+  build:
+    name: Build & GitHub Release
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
           fetch-depth: 0
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install Nushell
         run: cargo install nu --locked
 
       - name: Install git-cliff
-        run: |
-          wget -q https://github.com/orhun/git-cliff/releases/download/v2.4.0/git-cliff-2.4.0-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf git-cliff-2.4.0-x86_64-unknown-linux-gnu.tar.gz
-          sudo mv git-cliff-2.4.0/git-cliff /usr/local/bin/
-          git-cliff --version
+        run: cargo install git-cliff --locked
 
       - name: Prepare release notes
-        run: nu scripts/release_prepare.nu ${{ github.ref_name }}
+        run: nu scripts/release_prepare.nu ${{ needs.validate.outputs.tag }}
 
       - name: Build release binary (CLI)
         run: cargo build --release -p netrunner_cli
 
       - name: Package binary (Linux)
-        run: tar -C target/release -czvf netrunner_cli-${{ github.ref_name }}-linux-x86_64.tar.gz netrunner_cli
+        run: tar -C target/release -czvf netrunner_cli-${{ needs.validate.outputs.tag }}-linux-x86_64.tar.gz netrunner_cli
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.validate.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: |
-            netrunner_cli-${{ github.ref_name }}-linux-x86_64.tar.gz
+            netrunner_cli-${{ needs.validate.outputs.tag }}-linux-x86_64.tar.gz
             LICENSE
             README.md
             CHANGELOG.md
         env:
-          GITHUB_TOKEN: ${{ secrets.CI_OPERATIONS_SECRET }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to crates.io
-        if: env.CRATES_IO_TOKEN != ''
-        env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          echo "Publishing workspace crates in dependency order…"
-          # netrunner-core must be published (and indexed) before the CLI, which
-          # depends on it. The GPUI desktop app (`netrunner`) is not auto-published
-          # because crates.io verification would require a graphical toolchain.
-          cargo publish -p netrunner-core --token "$CRATES_IO_TOKEN"
-          echo "Waiting for crates.io to index netrunner-core…"
-          sleep 45
-          cargo publish -p netrunner_cli --token "$CRATES_IO_TOKEN"
+  # ── 3. Publish core + CLI to crates.io (headless, dependency order) ───────────
+  publish:
+    name: Publish core + CLI
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.CRATES_IO_TOKEN != '' }}
+    steps:
+      - name: Skip (no token)
+        if: env.HAS_TOKEN != 'true'
+        run: echo "⏭️  CRATES_IO_TOKEN not set — skipping crates.io publish."
 
-      - name: Skip crates.io publish
-        if: env.CRATES_IO_TOKEN == ''
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.HAS_TOKEN == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: env.HAS_TOKEN == 'true'
+
+      - name: Publish netrunner-core
+        if: env.HAS_TOKEN == 'true'
         env:
-          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
-          echo "⚠️  CRATES_IO_TOKEN not set. Skipping crates.io publication."
-          echo "To publish to crates.io, add CRATES_IO_TOKEN to your GitHub secrets."
+          V="${{ needs.validate.outputs.version }}"
+          if cargo info netrunner-core@$V >/dev/null 2>&1; then
+            echo "⏭️  netrunner-core@$V already published."
+          else
+            cargo publish -p netrunner-core
+            echo "⏳ Waiting for the index to propagate…"
+            sleep 45
+          fi
+
+      - name: Publish netrunner_cli
+        if: env.HAS_TOKEN == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          V="${{ needs.validate.outputs.version }}"
+          if cargo info netrunner_cli@$V >/dev/null 2>&1; then
+            echo "⏭️  netrunner_cli@$V already published."
+          else
+            cargo publish -p netrunner_cli
+          fi
+
+  # ── 4. Publish the GPUI desktop app (macOS — gpui builds natively there) ──────
+  publish-gui:
+    name: Publish GUI (macOS)
+    needs: [validate, publish]
+    runs-on: macos-latest
+    env:
+      HAS_TOKEN: ${{ secrets.CRATES_IO_TOKEN != '' }}
+    steps:
+      - name: Skip (no token)
+        if: env.HAS_TOKEN != 'true'
+        run: echo "⏭️  CRATES_IO_TOKEN not set — skipping GUI publish."
+
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.HAS_TOKEN == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: env.HAS_TOKEN == 'true'
+
+      - name: Publish netrunner (GUI)
+        if: env.HAS_TOKEN == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          V="${{ needs.validate.outputs.version }}"
+          if cargo info netrunner@$V >/dev/null 2>&1; then
+            echo "⏭️  netrunner@$V already published."
+          else
+            cargo publish -p netrunner
+          fi
