@@ -118,6 +118,8 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: Install Nushell
-        run: cargo install nu --locked
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "*"
       - name: Run Nu script tests
         run: nu scripts/tests/run_all.nu
