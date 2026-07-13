@@ -139,8 +139,8 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           V="${{ needs.validate.outputs.version }}"
-          if cargo info netrunner-core@$V >/dev/null 2>&1; then
-            echo "⏭️  netrunner-core@$V already published."
+          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner-core/$V" >/dev/null 2>&1; then
+            echo "⏭️  netrunner-core@$V already on crates.io."
           else
             cargo publish -p netrunner-core
             echo "⏳ Waiting for the index to propagate…"
@@ -153,8 +153,8 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           V="${{ needs.validate.outputs.version }}"
-          if cargo info netrunner_cli@$V >/dev/null 2>&1; then
-            echo "⏭️  netrunner_cli@$V already published."
+          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner_cli/$V" >/dev/null 2>&1; then
+            echo "⏭️  netrunner_cli@$V already on crates.io."
           else
             cargo publish -p netrunner_cli
           fi
@@ -186,8 +186,8 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           V="${{ needs.validate.outputs.version }}"
-          if cargo info netrunner@$V >/dev/null 2>&1; then
-            echo "⏭️  netrunner@$V already published."
+          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner/$V" >/dev/null 2>&1; then
+            echo "⏭️  netrunner@$V already on crates.io."
           else
             cargo publish -p netrunner
           fi
