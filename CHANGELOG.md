@@ -12,6 +12,7 @@ All notable changes to this project will be documented in this file.
 - ci(release): check crates.io (not local workspace) for idempotent publish
 ### 🔧 Chores
 - chore: rework justfile for the workspace (mirror gitkraft layout)
+- chore: bump version to 1.0.1
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v1.0.0...v1.0.1
 ## 1.0.0 - 2026-07-13
 ### 📚 Documentation
