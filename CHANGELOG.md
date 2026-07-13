@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.0.1 - 2026-07-13
+### 📚 Documentation
+- docs: update README and CHANGELOG for v1.0.0
+- docs: update repo URLs after renaming the GitHub repo to netrunner
+### 🔄 CI
+- ci(release): reliable dispatchable release flow (mirror gitkraft)
+- ci: install nu + git-cliff from prebuilt binaries (fast)
+- ci(release): check crates.io (not local workspace) for idempotent publish
+### 🔧 Chores
+- chore: rework justfile for the workspace (mirror gitkraft layout)
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v1.0.0...v1.0.1
 ## 1.0.0 - 2026-07-13
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v0.7.3

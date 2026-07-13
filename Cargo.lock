@@ -4163,7 +4163,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "futures",
  "gpui",
@@ -4174,7 +4174,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "dirs 6.0.0",
@@ -4196,7 +4196,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner_cli"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "byte-unit",
  "chrono",
