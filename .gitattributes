@@ -1,1 +1,2 @@
-examples/vhs/target/*.gif filter=lfs diff=lfs merge=lfs -text
+# Store demo GIFs in Git LFS wherever they live in the workspace.
+*.gif filter=lfs diff=lfs merge=lfs -text
