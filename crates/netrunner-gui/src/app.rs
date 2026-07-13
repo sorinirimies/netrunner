@@ -253,10 +253,12 @@ mod tests {
     #[test]
     fn completed_populates_result_and_metrics() {
         let mut app = SpeedApp::new();
-        let mut result = netrunner_core::SpeedTestResult::default();
-        result.download_mbps = 250.0;
-        result.upload_mbps = 40.0;
-        result.ping_ms = 12.0;
+        let result = netrunner_core::SpeedTestResult {
+            download_mbps: 250.0,
+            upload_mbps: 40.0,
+            ping_ms: 12.0,
+            ..Default::default()
+        };
 
         app.apply(TestEvent::Completed(Box::new(result)));
 

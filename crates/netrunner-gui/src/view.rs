@@ -31,7 +31,7 @@ impl Render for SpeedApp {
                         self.download_mbps,
                         self.peak_download,
                         &self.download_samples,
-                        download_color().into(),
+                        download_color(),
                         self.phase == Phase::Download,
                     ))
                     .child(chart_panel(
@@ -39,7 +39,7 @@ impl Render for SpeedApp {
                         self.upload_mbps,
                         self.peak_upload,
                         &self.upload_samples,
-                        upload_color().into(),
+                        upload_color(),
                         self.phase == Phase::Upload,
                     )),
             )
@@ -201,11 +201,7 @@ fn chart_panel(
         .max(peak)
         .max(1.0);
 
-    let border = if active {
-        color
-    } else {
-        rgb(PANEL_BORDER).into()
-    };
+    let border = if active { color } else { rgb(PANEL_BORDER) };
 
     let bars = samples.iter().map(move |&s| {
         let h = (s / max * CHART_HEIGHT).clamp(2.0, CHART_HEIGHT);
