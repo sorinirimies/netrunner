@@ -35,6 +35,14 @@ impl Phase {
 /// Maximum number of samples kept for each live chart.
 pub const MAX_SAMPLES: usize = 120;
 
+/// Test servers cycled through by the settings panel.
+pub const SERVER_PRESETS: &[&str] = &[
+    "https://speed.cloudflare.com",
+    "https://httpbin.org",
+    "https://www.google.com",
+    "https://fast.com",
+];
+
 /// The root application entity.
 pub struct SpeedApp {
     pub config: TestConfig,
@@ -127,6 +135,49 @@ impl SpeedApp {
             let _ = store.clear_history();
         }
         self.history.clear();
+    }
+
+    /// Rebuild the active [`TestConfig`] from settings and persist to JSON.
+    fn apply_and_save_settings(&mut self) {
+        self.config = self.settings.to_config();
+        let _ = self.settings.save();
+    }
+
+    /// Cycle the test server through the built-in presets.
+    pub fn cycle_server(&mut self) {
+        let idx = SERVER_PRESETS
+            .iter()
+            .position(|s| *s == self.settings.server_url)
+            .map(|i| (i + 1) % SERVER_PRESETS.len())
+            .unwrap_or(0);
+        self.settings.server_url = SERVER_PRESETS[idx].to_string();
+        self.apply_and_save_settings();
+    }
+
+    /// Adjust the test payload size (MB), clamped to a sane range.
+    pub fn adjust_size(&mut self, delta: i64) {
+        let v = (self.settings.test_size_mb as i64 + delta).clamp(1, 1000);
+        self.settings.test_size_mb = v as u64;
+        self.apply_and_save_settings();
+    }
+
+    /// Adjust the per-test timeout (seconds), clamped to a sane range.
+    pub fn adjust_timeout(&mut self, delta: i64) {
+        let v = (self.settings.timeout_seconds as i64 + delta).clamp(5, 120);
+        self.settings.timeout_seconds = v as u64;
+        self.apply_and_save_settings();
+    }
+
+    /// Cycle the output detail level.
+    pub fn cycle_detail(&mut self) {
+        use netrunner_core::DetailLevel::*;
+        self.settings.detail_level = match self.settings.detail_level {
+            Basic => Standard,
+            Standard => Detailed,
+            Detailed => Debug,
+            Debug => Basic,
+        };
+        self.apply_and_save_settings();
     }
 
     /// Kick off a full speed test and stream its progress into this entity.

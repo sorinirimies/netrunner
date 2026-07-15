@@ -10,9 +10,11 @@ const CHART_HEIGHT: f32 = 170.0;
 impl Render for SpeedApp {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .id("root")
             .flex()
             .flex_col()
             .size_full()
+            .overflow_y_scroll()
             .bg(rgb(BG))
             .text_color(rgb(TEXT))
             .font_family("monospace")
@@ -44,6 +46,7 @@ impl Render for SpeedApp {
                     )),
             )
             .child(self.summary())
+            .child(self.settings_panel(cx))
             .child(self.history_panel(cx))
     }
 }
@@ -212,6 +215,121 @@ impl SpeedApp {
             )
     }
 
+    fn settings_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let s = &self.settings;
+        let server_host = s
+            .server_url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .to_string();
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .w_full()
+            .p_4()
+            .rounded_md()
+            .bg(rgb(PANEL_BG))
+            .border_1()
+            .border_color(rgb(PANEL_BORDER))
+            .child(div().text_color(rgb(YELLOW)).child("⚙  SETTINGS"))
+            .child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .flex_wrap()
+                    .items_end()
+                    .gap_6()
+                    .child(setting_group(
+                        "Server",
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_2()
+                            .child(div().text_color(rgb(TEXT)).child(server_host))
+                            .child(ctrl_pill("server-cycle", "↺").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.cycle_server();
+                                    cx.notify();
+                                },
+                            ))),
+                    ))
+                    .child(setting_group(
+                        "Size (MB)",
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_2()
+                            .child(ctrl_pill("size-dec", "−").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.adjust_size(-1);
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
+                                div()
+                                    .w(px(44.))
+                                    .text_color(rgb(TEXT))
+                                    .child(format!("{}", s.test_size_mb)),
+                            )
+                            .child(ctrl_pill("size-inc", "+").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.adjust_size(1);
+                                    cx.notify();
+                                },
+                            ))),
+                    ))
+                    .child(setting_group(
+                        "Timeout (s)",
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_2()
+                            .child(ctrl_pill("to-dec", "−").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.adjust_timeout(-5);
+                                    cx.notify();
+                                },
+                            )))
+                            .child(
+                                div()
+                                    .w(px(44.))
+                                    .text_color(rgb(TEXT))
+                                    .child(format!("{}", s.timeout_seconds)),
+                            )
+                            .child(ctrl_pill("to-inc", "+").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.adjust_timeout(5);
+                                    cx.notify();
+                                },
+                            ))),
+                    ))
+                    .child(setting_group(
+                        "Detail",
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_color(rgb(TEXT))
+                                    .child(s.detail_level.to_string()),
+                            )
+                            .child(ctrl_pill("detail-cycle", "↺").on_click(cx.listener(
+                                |a, _e, _w, cx| {
+                                    a.cycle_detail();
+                                    cx.notify();
+                                },
+                            ))),
+                    )),
+            )
+    }
+
     fn history_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let has_history = !self.history.is_empty();
 
@@ -364,6 +482,36 @@ fn kv(label: &str, value: String) -> impl IntoElement {
         .gap_2()
         .child(div().text_color(rgb(MUTED)).child(format!("{label}:")))
         .child(div().text_color(rgb(TEXT)).child(value))
+}
+
+/// A small clickable control pill (stepper / cycle button). Attach `.on_click`.
+fn ctrl_pill(id: &'static str, label: impl Into<String>) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .px_2()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(rgb(PANEL_BORDER))
+        .text_color(rgb(CYAN))
+        .cursor_pointer()
+        .hover(|s| s.bg(rgb(PANEL_BORDER)))
+        .child(label.into())
+}
+
+/// A labelled settings control group (small caption above its controls).
+fn setting_group(name: &str, controls: impl IntoElement) -> impl IntoElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .child(
+            div()
+                .text_xs()
+                .text_color(rgb(MUTED))
+                .child(name.to_string()),
+        )
+        .child(controls)
 }
 
 /// A single row in the history list: date, download, upload, ping, quality.

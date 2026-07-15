@@ -154,10 +154,11 @@ Linux, `~/Library/Application Support/netrunner/` on macOS):
 | `netrunner_history.db` | redb (binary) | speed-test history — **shared by the TUI and GUI** so past runs show up in both |
 | `settings.json` | JSON | user preferences (default server, timeouts, `auto_run`, `max_history`, …) — human-editable |
 
-The desktop app lists recent runs, lets you toggle **Auto-run** (persisted to
-`settings.json`) and clear history. History is a proper time-series in redb;
-JSON is reserved for small, editable settings. You can still export history to
-JSON via `HistoryStorage::export_to_json`.
+The desktop app lists recent runs, has an editable **Settings** panel (server
+preset, test size, timeout, detail level) that writes straight to
+`settings.json`, an **Auto-run** toggle, and a **Clear history** button. History
+is a proper time-series in redb; JSON is reserved for small, editable settings.
+You can still export history to JSON via `HistoryStorage::export_to_json`.
 
 ## Development
 
