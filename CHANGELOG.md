@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v1.0.1
 - docs: rewrite README — cleaner, fixed previews, GUI + core library docs
+### 🔧 Chores
+- chore: bump version to 2.0.0
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v1.0.1...v2.0.0
 ## 1.0.1 - 2026-07-13
 ### 📚 Documentation
