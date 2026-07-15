@@ -4165,6 +4165,7 @@ dependencies = [
 name = "netrunner"
 version = "1.0.1"
 dependencies = [
+ "chrono",
  "futures",
  "gpui",
  "netrunner-core",

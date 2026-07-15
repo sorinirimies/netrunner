@@ -32,6 +32,7 @@ pub mod diagnostics;
 pub mod events;
 pub mod history;
 pub mod presentation;
+pub mod settings;
 pub mod speed_test;
 pub mod types;
 
@@ -40,6 +41,7 @@ pub use diagnostics::NetworkDiagnosticsTool;
 pub use events::{emit, EventSender, Phase, SelectedServer, TestEvent};
 pub use history::{DbStats, HistoryStorage, SpeedTrends, TestStatistics};
 pub use presentation::{palette, quality_rgb};
+pub use settings::Settings;
 pub use speed_test::{GeoLocation, SpeedTest};
 pub use types::{
     ConnectionQuality, DetailLevel, NetworkDiagnostics, RouteHop, ServerCapabilities,

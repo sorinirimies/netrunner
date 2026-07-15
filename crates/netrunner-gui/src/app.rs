@@ -2,7 +2,7 @@
 
 use futures::StreamExt;
 use gpui::{Context, SharedString};
-use netrunner_core::{SpeedTestResult, TestConfig, TestEvent};
+use netrunner_core::{HistoryStorage, Settings, SpeedTestResult, TestConfig, TestEvent};
 
 use crate::engine::spawn_speed_test;
 
@@ -38,6 +38,7 @@ pub const MAX_SAMPLES: usize = 120;
 /// The root application entity.
 pub struct SpeedApp {
     pub config: TestConfig,
+    pub settings: Settings,
     pub status: SharedString,
     pub phase: Phase,
     pub running: bool,
@@ -55,12 +56,18 @@ pub struct SpeedApp {
     pub isp: Option<SharedString>,
     pub server: Option<SharedString>,
     pub result: Option<SpeedTestResult>,
+
+    /// Recent past runs, newest first (read from the shared redb history).
+    pub history: Vec<SpeedTestResult>,
 }
 
 impl SpeedApp {
+    /// Build a fresh, side-effect-free state (no disk access — see [`Self::boot`]).
     pub fn new() -> Self {
+        let settings = Settings::default();
         Self {
-            config: TestConfig::default(),
+            config: settings.to_config(),
+            settings,
             status: "Ready to jack in.".into(),
             phase: Phase::Idle,
             running: false,
@@ -75,7 +82,51 @@ impl SpeedApp {
             isp: None,
             server: None,
             result: None,
+            history: Vec::new(),
         }
+    }
+
+    /// Load persisted settings (JSON) and history (redb) from disk.
+    ///
+    /// Kept separate from [`Self::new`] so unit tests stay pure and don't touch
+    /// the user's real config/history files.
+    pub fn boot(&mut self) {
+        self.settings = Settings::load();
+        self.config = self.settings.to_config();
+        self.reload_history();
+    }
+
+    /// Re-read recent runs from the shared history database.
+    pub fn reload_history(&mut self) {
+        if let Ok(store) = HistoryStorage::new() {
+            if let Ok(results) = store.get_recent_results(self.settings.max_history) {
+                self.history = results;
+            }
+        }
+    }
+
+    /// Persist the most recent result to the shared history and refresh the list.
+    fn persist_last_result(&mut self) {
+        if let Some(result) = self.result.clone() {
+            if let Ok(store) = HistoryStorage::new() {
+                let _ = store.save_result(&result);
+            }
+            self.reload_history();
+        }
+    }
+
+    /// Toggle the "run a test on launch" preference and persist settings.
+    pub fn toggle_auto_run(&mut self) {
+        self.settings.auto_run = !self.settings.auto_run;
+        let _ = self.settings.save();
+    }
+
+    /// Clear all saved history (and the on-screen list).
+    pub fn clear_history(&mut self) {
+        if let Ok(store) = HistoryStorage::new() {
+            let _ = store.clear_history();
+        }
+        self.history.clear();
     }
 
     /// Kick off a full speed test and stream its progress into this entity.
@@ -107,7 +158,13 @@ impl SpeedApp {
             while let Some(event) = rx.next().await {
                 let keep_going = this
                     .update(cx, |app, cx| {
+                        let completed = matches!(&event, TestEvent::Completed(_));
                         app.apply(event);
+                        if completed {
+                            // Save this run to the shared history (redb) and
+                            // refresh the on-screen list.
+                            app.persist_last_result();
+                        }
                         cx.notify();
                     })
                     .is_ok();

@@ -22,8 +22,14 @@ fn main() {
             },
             |_, cx| {
                 let app = cx.new(|_| SpeedApp::new());
-                // Auto-start a test so the charts come alive immediately.
-                app.update(cx, |state, cx| state.start(cx));
+                app.update(cx, |state, cx| {
+                    // Load persisted settings + history, then auto-start a test
+                    // if the user enabled it (default on) so the charts come alive.
+                    state.boot();
+                    if state.settings.auto_run {
+                        state.start(cx);
+                    }
+                });
                 app
             },
         )

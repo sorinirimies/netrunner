@@ -23,5 +23,6 @@ path = "src/lib.rs"
 netrunner-core = { workspace = true }
 tokio = { workspace = true }
 rustls = { workspace = true }
+chrono = { workspace = true }
 futures = { workspace = true }
 gpui = { workspace = true }

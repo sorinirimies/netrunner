@@ -144,6 +144,21 @@ Public surface: `SpeedTest`, `TestConfig`, `TestEvent`, `NetworkDiagnosticsTool`
 - **History** — embedded [redb](https://crates.io/crates/redb) database with
   30-day retention and per-run statistics.
 
+## Data & settings
+
+Both apps share the same files under your config dir (`~/.config/netrunner/` on
+Linux, `~/Library/Application Support/netrunner/` on macOS):
+
+| File | Format | What |
+|------|--------|------|
+| `netrunner_history.db` | redb (binary) | speed-test history — **shared by the TUI and GUI** so past runs show up in both |
+| `settings.json` | JSON | user preferences (default server, timeouts, `auto_run`, `max_history`, …) — human-editable |
+
+The desktop app lists recent runs, lets you toggle **Auto-run** (persisted to
+`settings.json`) and clear history. History is a proper time-series in redb;
+JSON is reserved for small, editable settings. You can still export history to
+JSON via `HistoryStorage::export_to_json`.
+
 ## Development
 
 This is a Cargo workspace driven by a [`justfile`](justfile):

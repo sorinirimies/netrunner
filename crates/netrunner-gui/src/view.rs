@@ -44,12 +44,14 @@ impl Render for SpeedApp {
                     )),
             )
             .child(self.summary())
+            .child(self.history_panel(cx))
     }
 }
 
 impl SpeedApp {
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let running = self.running;
+        let auto_run = self.settings.auto_run;
         let button_label = if running {
             "RUNNING…"
         } else {
@@ -79,18 +81,44 @@ impl SpeedApp {
             )
             .child(
                 div()
-                    .id("run")
-                    .px_4()
-                    .py_2()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(rgb(if running { MUTED } else { GREEN }))
-                    .text_color(rgb(if running { MUTED } else { GREEN }))
-                    .bg(rgb(PANEL_BG))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(rgb(PANEL_BORDER)))
-                    .on_click(cx.listener(|app, _ev, _window, cx| app.start(cx)))
-                    .child(button_label),
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_2()
+                    // Auto-run toggle — persisted to settings.json on click.
+                    .child(
+                        div()
+                            .id("autorun")
+                            .px_3()
+                            .py_2()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(rgb(if auto_run { GREEN } else { PANEL_BORDER }))
+                            .text_color(rgb(if auto_run { GREEN } else { MUTED }))
+                            .bg(rgb(PANEL_BG))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgb(PANEL_BORDER)))
+                            .on_click(cx.listener(|app, _ev, _window, cx| {
+                                app.toggle_auto_run();
+                                cx.notify();
+                            }))
+                            .child(format!("Auto-run: {}", if auto_run { "ON" } else { "OFF" })),
+                    )
+                    .child(
+                        div()
+                            .id("run")
+                            .px_4()
+                            .py_2()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(rgb(if running { MUTED } else { GREEN }))
+                            .text_color(rgb(if running { MUTED } else { GREEN }))
+                            .bg(rgb(PANEL_BG))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgb(PANEL_BORDER)))
+                            .on_click(cx.listener(|app, _ev, _window, cx| app.start(cx)))
+                            .child(button_label),
+                    ),
             )
     }
 
@@ -183,6 +211,70 @@ impl SpeedApp {
                     .child(kv("Server", server)),
             )
     }
+
+    fn history_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let has_history = !self.history.is_empty();
+
+        let header = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_color(rgb(MAGENTA))
+                    .child(format!("🗂  HISTORY ({})", self.history.len())),
+            )
+            .child(
+                div()
+                    .id("clear-history")
+                    .px_3()
+                    .py_1()
+                    .rounded_md()
+                    .border_1()
+                    .border_color(rgb(PANEL_BORDER))
+                    .text_color(rgb(MUTED))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgb(PANEL_BORDER)).text_color(rgb(RED)))
+                    .on_click(cx.listener(|app, _ev, _window, cx| {
+                        app.clear_history();
+                        cx.notify();
+                    }))
+                    .child("Clear"),
+            );
+
+        let body: gpui::AnyElement = if has_history {
+            let rows = self.history.iter().map(history_row).collect::<Vec<_>>();
+            div()
+                .id("history-list")
+                .flex()
+                .flex_col()
+                .gap_1()
+                .max_h(px(200.))
+                .overflow_y_scroll()
+                .children(rows)
+                .into_any_element()
+        } else {
+            div()
+                .text_sm()
+                .text_color(rgb(MUTED))
+                .child("No previous runs yet — run a test to start building history.")
+                .into_any_element()
+        };
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .w_full()
+            .p_4()
+            .rounded_md()
+            .bg(rgb(PANEL_BG))
+            .border_1()
+            .border_color(rgb(BLUE))
+            .child(header)
+            .child(body)
+    }
 }
 
 /// A single labelled live throughput chart.
@@ -272,4 +364,49 @@ fn kv(label: &str, value: String) -> impl IntoElement {
         .gap_2()
         .child(div().text_color(rgb(MUTED)).child(format!("{label}:")))
         .child(div().text_color(rgb(TEXT)).child(value))
+}
+
+/// A single row in the history list: date, download, upload, ping, quality.
+fn history_row(r: &netrunner_core::SpeedTestResult) -> impl IntoElement {
+    let when = r.timestamp.format("%m-%d %H:%M").to_string();
+    div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap_4()
+        .w_full()
+        .px_2()
+        .py_1()
+        .rounded_sm()
+        .hover(|s| s.bg(rgb(PANEL_BORDER)))
+        .child(
+            div()
+                .w(px(96.))
+                .text_sm()
+                .text_color(rgb(MUTED))
+                .child(when),
+        )
+        .child(
+            div()
+                .w(px(92.))
+                .text_color(rgb(GREEN))
+                .child(format!("↓ {:.1}", r.download_mbps)),
+        )
+        .child(
+            div()
+                .w(px(92.))
+                .text_color(rgb(CYAN))
+                .child(format!("↑ {:.1}", r.upload_mbps)),
+        )
+        .child(
+            div()
+                .w(px(72.))
+                .text_color(rgb(BLUE))
+                .child(format!("{:.0} ms", r.ping_ms)),
+        )
+        .child(
+            div()
+                .text_color(quality_color(r.quality))
+                .child(r.quality.to_string()),
+        )
 }
