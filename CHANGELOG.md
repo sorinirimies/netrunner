@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2.0.0 - 2026-07-15
+### ✨ Features
+- feat(gui): show run history + JSON settings; add core Settings type
+- feat(gui): editable settings panel (server, size, timeout, detail)
+### 📚 Documentation
+- docs: update README and CHANGELOG for v1.0.1
+- docs: rewrite README — cleaner, fixed previews, GUI + core library docs
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v1.0.1...v2.0.0
 ## 1.0.1 - 2026-07-13
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v1.0.0
