@@ -114,12 +114,26 @@ impl SpeedApp {
     }
 
     /// Persist the most recent result to the shared history and refresh the list.
+    ///
+    /// Uses a single store handle for the write **and** the follow-up read, and
+    /// surfaces failures on the status line instead of swallowing them. Saving
+    /// the same result twice is harmless (identical timestamp key overwrites).
     fn persist_last_result(&mut self) {
-        if let Some(result) = self.result.clone() {
-            if let Ok(store) = HistoryStorage::new() {
-                let _ = store.save_result(&result);
+        let Some(result) = self.result.clone() else {
+            return;
+        };
+        match HistoryStorage::new() {
+            Ok(store) => {
+                if let Err(e) = store.save_result(&result) {
+                    self.status = format!("Failed to save history: {e}").into();
+                }
+                if let Ok(results) = store.get_recent_results(self.settings.max_history) {
+                    self.history = results;
+                }
             }
-            self.reload_history();
+            Err(e) => {
+                self.status = format!("Failed to open history: {e}").into();
+            }
         }
     }
 
@@ -227,6 +241,11 @@ impl SpeedApp {
                 app.running = false;
                 if app.phase != Phase::Done {
                     app.phase = Phase::Done;
+                }
+                // Safety net: guarantee the finished run is saved even if the
+                // Completed event didn't persist it (idempotent — same key).
+                if app.result.is_some() {
+                    app.persist_last_result();
                 }
                 cx.notify();
             });
@@ -394,5 +413,32 @@ mod tests {
             app.isp.as_ref().map(|s| s.to_string()),
             Some("Example ISP".to_string())
         );
+    }
+
+    #[test]
+    fn completed_run_is_persisted_and_reloaded() {
+        // Point the config dir at a throwaway HOME so we don't touch real data.
+        let tmp = std::env::temp_dir().join(format!("nr_gui_persist_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("HOME", &tmp);
+        std::env::set_var("XDG_CONFIG_HOME", tmp.join(".config"));
+
+        let mut app = SpeedApp::new();
+        app.reload_history();
+        assert_eq!(app.history.len(), 0, "fresh HOME should have empty history");
+
+        app.result = Some(netrunner_core::SpeedTestResult {
+            download_mbps: 100.0,
+            upload_mbps: 20.0,
+            ping_ms: 5.0,
+            ..Default::default()
+        });
+        app.persist_last_result();
+
+        assert_eq!(app.history.len(), 1, "run should be saved and reloaded");
+        assert_eq!(app.history[0].download_mbps, 100.0);
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
