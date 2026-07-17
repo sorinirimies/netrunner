@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2.0.2 - 2026-07-17
+### 📚 Documentation
+- docs: update README and CHANGELOG for v2.0.1
+### 📦 Other Changes
+- refactor+tooling: dedup geolocation, modular nu tests, faster release
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.1...v2.0.2
 ## 2.0.1 - 2026-07-17
 ### 🐛 Bug Fixes
 - fix(gui): make run-history persistence robust and visible
