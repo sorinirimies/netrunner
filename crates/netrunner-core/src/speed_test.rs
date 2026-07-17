@@ -1,23 +1,29 @@
 //! Speed Test Module
 //!
-//! A robust, high-performance speed testing implementation optimized for gigabit+ connections:
-//! - 50 parallel connections for maximum throughput
-//! - Large 500MB chunk downloads to minimize overhead
-//! - 2-second warmup period to establish connections
-//! - Intelligent server selection based on geolocation
-//! - Progressive speed sampling with averaging for accuracy
-//! - Excludes warmup period from final calculations
-//! - Support for speeds up to 10 Gbps
-//! - Fault tolerance and automatic fallbacks
+//! A robust, high-performance speed-test implementation tuned for accuracy
+//! (results comparable to speedtest.net):
+//! - Throughput is measured against a reliable anycast backend
+//!   (`speed.cloudflare.com`, which routes to the nearest edge and actually
+//!   implements the download/upload protocol) rather than a mix of discovered
+//!   servers that may not serve the endpoint.
+//! - 50 parallel connections to saturate fast links.
+//! - Lock-free (atomic) byte counting, so the measurement itself is not the
+//!   bottleneck at gigabit speeds.
+//! - Excludes the TCP slow-start warmup window and reports a trimmed,
+//!   steady-state *sustained* throughput.
+//! - Geolocation-based server selection is still used for latency/ping.
+//! - Support for speeds up to 10 Gbps, with graceful failure (0 Mbps ->
+//!   `ConnectionQuality::Failed`) instead of a misleading floor.
 
 use chrono::Utc;
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::events::{emit, EventSender, Phase, SelectedServer, TestEvent};
 use crate::types::{
@@ -26,6 +32,19 @@ use crate::types::{
 
 const PARALLEL_CONNECTIONS: usize = 50;
 const SERVER_SELECTION_COUNT: usize = 3;
+/// Total wall-clock duration of a throughput phase.
+const TEST_SECS: u64 = 15;
+/// Initial window excluded from the final throughput calc (TCP slow-start).
+const WARMUP_SECS: f64 = 3.0;
+/// Reliable, anycast throughput backend: Cloudflare's speed-test endpoints,
+/// which route to the nearest edge and actually implement `/__down` + `/__up`.
+/// Measuring against one well-provisioned backend — rather than a mix of
+/// discovered servers that may not implement the download protocol — is what
+/// makes the numbers comparable to speedtest.net. (The previous code appended
+/// `/__down` to every server, but only Cloudflare serves it, so half the
+/// connections transferred nothing and the result was badly under-reported.)
+const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=100000000";
+const UPLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__up";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeoLocation {
@@ -131,10 +150,10 @@ impl SpeedTest {
         let ping_ms = self.measure_latency(&best_servers[0]).await?;
 
         // Phase 5: Download test (progressive)
-        let download_mbps = self.progressive_download_test(&best_servers).await?;
+        let download_mbps = self.progressive_download_test().await?;
 
         // Phase 6: Upload test (progressive)
-        let upload_mbps = self.progressive_upload_test(&best_servers).await?;
+        let upload_mbps = self.progressive_upload_test().await?;
 
         // Phase 7: Calculate statistics
         emit(&self.events, TestEvent::PhaseStarted(Phase::Jitter));
@@ -1090,139 +1109,86 @@ impl SpeedTest {
         Ok(server)
     }
 
-    /// Progressive download test - starts with rough estimate, refines over time
-    async fn progressive_download_test(
-        &self,
-        servers: &[TestServer],
-    ) -> Result<f64, Box<dyn std::error::Error>> {
+    /// Progressive download test against a reliable anycast backend.
+    ///
+    /// Fixes vs the old implementation: uses a real speed-test endpoint (so
+    /// every connection transfers data), a lock-free counter, and a
+    /// warmup-excluded, outlier-trimmed *sustained* throughput — which is what
+    /// speedtest.net reports.
+    async fn progressive_download_test(&self) -> Result<f64, Box<dyn std::error::Error>> {
         emit(&self.events, TestEvent::PhaseStarted(Phase::Download));
 
-        let total_bytes = Arc::new(Mutex::new(0usize));
+        // Lock-free shared byte counter: at gigabit speeds a Mutex locked on
+        // every chunk becomes the bottleneck and under-reports throughput.
+        let total_bytes = Arc::new(AtomicU64::new(0));
         let start = Instant::now();
-        let test_duration = Duration::from_secs(15);
+        let test_duration = Duration::from_secs(TEST_SECS);
 
         let mut handles = Vec::new();
-
-        // Start 50 parallel download connections
-        for i in 0..PARALLEL_CONNECTIONS {
-            let server = &servers[i % servers.len()];
-            let url = format!("{}/__down?bytes=100000000", server.url); // 100MB chunks
+        for _ in 0..PARALLEL_CONNECTIONS {
+            let url = DOWNLOAD_ENDPOINT.to_string();
             let client = self.client.clone();
             let total_bytes = Arc::clone(&total_bytes);
             let test_start = start;
 
             let handle = tokio::spawn(async move {
                 let end_time = test_start + test_duration;
-
                 while Instant::now() < end_time {
                     match client.get(&url).send().await {
                         Ok(response) => {
                             let mut stream = response.bytes_stream();
-
                             while let Some(chunk_result) = stream.next().await {
                                 if Instant::now() >= end_time {
                                     break;
                                 }
                                 if let Ok(chunk) = chunk_result {
-                                    let mut total = total_bytes.lock().await;
-                                    *total += chunk.len();
+                                    total_bytes.fetch_add(chunk.len() as u64, Ordering::Relaxed);
                                 }
                             }
                         }
-                        Err(_) => {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
+                        Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
                     }
-
                     if Instant::now() >= end_time {
                         break;
                     }
                 }
             });
-
             handles.push(handle);
         }
 
-        // Monitor progress and emit live speed samples
-        let total_bytes_monitor = Arc::clone(&total_bytes);
+        // Monitor emits live samples and returns them for the final calc.
         let events = self.events.clone();
-
+        let total_bytes_monitor = Arc::clone(&total_bytes);
         let monitor_handle = tokio::spawn(async move {
-            let mut last_bytes = 0;
-            let mut last_time = Instant::now();
-            let mut peak = 0.0f64;
-            let end_time = start + test_duration;
-
-            while Instant::now() < end_time {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-
-                let bytes = *total_bytes_monitor.lock().await;
-                let time_diff = last_time.elapsed().as_secs_f64();
-
-                if time_diff >= 0.2 {
-                    let bytes_diff = bytes.saturating_sub(last_bytes);
-                    let speed = (bytes_diff as f64 * 8.0) / (time_diff * 1_000_000.0);
-                    peak = peak.max(speed);
-
-                    emit(
-                        &events,
-                        TestEvent::DownloadSample {
-                            mbps: speed,
-                            peak_mbps: peak,
-                            elapsed_secs: start.elapsed().as_secs_f64(),
-                        },
-                    );
-
-                    last_bytes = bytes;
-                    last_time = Instant::now();
-                }
-            }
+            collect_throughput_samples(total_bytes_monitor, start, test_duration, events, false)
+                .await
         });
 
-        // Wait for all tasks to complete
         for handle in handles {
             let _ = handle.await;
         }
-        let _ = monitor_handle.await;
+        let samples = monitor_handle.await.unwrap_or_default();
 
-        // Calculate final speed
-        let elapsed = start.elapsed().as_secs_f64();
-        let total = *total_bytes.lock().await;
-
-        let mbps = if total > 1_000_000 && elapsed > 1.0 {
-            let bits = total as f64 * 8.0;
-            bits / (elapsed * 1_000_000.0)
-        } else {
-            1.0 // Minimum 1 Mbps if test failed
-        };
-
-        let mbps = mbps.clamp(1.0, 10_000.0);
+        let mbps = sustained_mbps(&samples, WARMUP_SECS).clamp(0.0, 10_000.0);
         emit(&self.events, TestEvent::DownloadComplete { mbps });
-
         Ok(mbps)
     }
 
-    /// Progressive upload test
-    async fn progressive_upload_test(
-        &self,
-        servers: &[TestServer],
-    ) -> Result<f64, Box<dyn std::error::Error>> {
+    /// Progressive upload test against the reliable anycast backend.
+    async fn progressive_upload_test(&self) -> Result<f64, Box<dyn std::error::Error>> {
         emit(&self.events, TestEvent::PhaseStarted(Phase::Upload));
 
-        let total_bytes = Arc::new(Mutex::new(0usize));
+        let total_bytes = Arc::new(AtomicU64::new(0));
         let start = Instant::now();
-        let test_duration = Duration::from_secs(15);
+        let test_duration = Duration::from_secs(TEST_SECS);
 
-        // Use 5MB chunks for upload
+        // 5 MB chunks streamed repeatedly for the duration of the test.
         let chunk_size = 5 * 1024 * 1024;
         let test_data = vec![0u8; chunk_size];
 
         let mut handles = Vec::new();
-
-        // Start 10 parallel upload connections
-        for i in 0..10 {
-            let server = &servers[i % servers.len()];
-            let url = format!("{}/__up", server.url);
+        for _ in 0..10 {
+            let url = UPLOAD_ENDPOINT.to_string();
             let client = self.client.clone();
             let total_bytes = Arc::clone(&total_bytes);
             let data = test_data.clone();
@@ -1230,7 +1196,6 @@ impl SpeedTest {
 
             let handle = tokio::spawn(async move {
                 let end_time = test_start + test_duration;
-
                 while Instant::now() < end_time {
                     match client
                         .post(&url)
@@ -1240,75 +1205,29 @@ impl SpeedTest {
                         .await
                     {
                         Ok(_) => {
-                            let mut total = total_bytes.lock().await;
-                            *total += data.len();
+                            total_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
                         }
-                        Err(_) => {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
+                        Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
                     }
                 }
             });
-
             handles.push(handle);
         }
 
-        // Monitor progress and emit live speed samples
-        let total_bytes_monitor = Arc::clone(&total_bytes);
         let events = self.events.clone();
-
+        let total_bytes_monitor = Arc::clone(&total_bytes);
         let monitor_handle = tokio::spawn(async move {
-            let mut last_bytes = 0;
-            let mut last_time = Instant::now();
-            let mut peak = 0.0f64;
-            let end_time = start + test_duration;
-
-            while Instant::now() < end_time {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-
-                let bytes = *total_bytes_monitor.lock().await;
-                let time_diff = last_time.elapsed().as_secs_f64();
-
-                if time_diff >= 0.2 {
-                    let bytes_diff = bytes.saturating_sub(last_bytes);
-                    let speed = (bytes_diff as f64 * 8.0) / (time_diff * 1_000_000.0);
-                    peak = peak.max(speed);
-
-                    emit(
-                        &events,
-                        TestEvent::UploadSample {
-                            mbps: speed,
-                            peak_mbps: peak,
-                            elapsed_secs: start.elapsed().as_secs_f64(),
-                        },
-                    );
-
-                    last_bytes = bytes;
-                    last_time = Instant::now();
-                }
-            }
+            collect_throughput_samples(total_bytes_monitor, start, test_duration, events, true)
+                .await
         });
 
-        // Wait for all tasks to complete
         for handle in handles {
             let _ = handle.await;
         }
-        let _ = monitor_handle.await;
+        let samples = monitor_handle.await.unwrap_or_default();
 
-        // Calculate final speed
-        let elapsed = start.elapsed().as_secs_f64();
-        let total = *total_bytes.lock().await;
-
-        let mbps = if total > 1_000_000 && elapsed > 1.0 {
-            let bits = total as f64 * 8.0;
-            bits / (elapsed * 1_000_000.0)
-        } else {
-            1.0 // Minimum 1 Mbps if test failed
-        };
-
-        let mbps = mbps.clamp(1.0, 10_000.0);
+        let mbps = sustained_mbps(&samples, WARMUP_SECS).clamp(0.0, 10_000.0);
         emit(&self.events, TestEvent::UploadComplete { mbps });
-
         Ok(mbps)
     }
 
@@ -1476,9 +1395,135 @@ fn build_geo(
     })
 }
 
+/// Poll a shared byte counter every 200 ms, emit live throughput samples, and
+/// return every `(elapsed_secs, mbps)` sample for the final calculation.
+///
+/// Shared by the download and upload phases (previously duplicated).
+async fn collect_throughput_samples(
+    total_bytes: Arc<AtomicU64>,
+    start: Instant,
+    test_duration: Duration,
+    events: Option<EventSender>,
+    is_upload: bool,
+) -> Vec<(f64, f64)> {
+    let mut samples = Vec::new();
+    let mut last_bytes = 0u64;
+    let mut last_time = Instant::now();
+    let mut peak = 0.0f64;
+    let end_time = start + test_duration;
+
+    while Instant::now() < end_time {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let bytes = total_bytes.load(Ordering::Relaxed);
+        let time_diff = last_time.elapsed().as_secs_f64();
+        if time_diff >= 0.2 {
+            let bytes_diff = bytes.saturating_sub(last_bytes);
+            let mbps = (bytes_diff as f64 * 8.0) / (time_diff * 1_000_000.0);
+            peak = peak.max(mbps);
+            let elapsed = start.elapsed().as_secs_f64();
+            samples.push((elapsed, mbps));
+
+            let event = if is_upload {
+                TestEvent::UploadSample {
+                    mbps,
+                    peak_mbps: peak,
+                    elapsed_secs: elapsed,
+                }
+            } else {
+                TestEvent::DownloadSample {
+                    mbps,
+                    peak_mbps: peak,
+                    elapsed_secs: elapsed,
+                }
+            };
+            emit(&events, event);
+
+            last_bytes = bytes;
+            last_time = Instant::now();
+        }
+    }
+    samples
+}
+
+/// Compute sustained throughput (Mbps) from per-interval `(elapsed_s, mbps)`
+/// samples the way speedtest.net does: drop the TCP slow-start warmup window,
+/// then trim the slowest/fastest 10% (transient dips and spikes) and average
+/// the steady-state middle. Returns `0.0` when there is no usable data (a
+/// genuine failure, which maps to `ConnectionQuality::Failed`).
+fn sustained_mbps(samples: &[(f64, f64)], warmup_secs: f64) -> f64 {
+    let mut steady: Vec<f64> = samples
+        .iter()
+        .filter(|(t, mbps)| *t >= warmup_secs && *mbps > 0.0)
+        .map(|(_, mbps)| *mbps)
+        .collect();
+
+    // If the whole test was shorter than the warmup, fall back to any samples.
+    if steady.is_empty() {
+        steady = samples
+            .iter()
+            .map(|(_, mbps)| *mbps)
+            .filter(|mbps| *mbps > 0.0)
+            .collect();
+    }
+    if steady.is_empty() {
+        return 0.0;
+    }
+
+    steady.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let trim = steady.len() / 10;
+    let slice = &steady[trim..steady.len() - trim];
+    let slice = if slice.is_empty() { &steady[..] } else { slice };
+    slice.iter().sum::<f64>() / slice.len() as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sustained_mbps_excludes_warmup() {
+        // Ramp during warmup (<3s) is slow; steady state is ~100.
+        let samples = vec![
+            (0.2, 5.0),
+            (1.0, 20.0),
+            (2.0, 60.0),
+            (3.2, 100.0),
+            (4.0, 101.0),
+            (5.0, 99.0),
+            (6.0, 100.0),
+        ];
+        let mbps = sustained_mbps(&samples, WARMUP_SECS);
+        assert!(
+            (mbps - 100.0).abs() < 5.0,
+            "expected ~100 sustained, got {mbps}"
+        );
+    }
+
+    #[test]
+    fn sustained_mbps_trims_outliers() {
+        // One huge spike and one deep dip in steady state should be trimmed.
+        let mut samples = vec![(3.5, 0.1), (3.6, 5000.0)];
+        for i in 0..20 {
+            samples.push((4.0 + i as f64 * 0.1, 500.0));
+        }
+        let mbps = sustained_mbps(&samples, WARMUP_SECS);
+        assert!((mbps - 500.0).abs() < 20.0, "expected ~500, got {mbps}");
+    }
+
+    #[test]
+    fn sustained_mbps_zero_when_no_data() {
+        assert_eq!(sustained_mbps(&[], WARMUP_SECS), 0.0);
+        assert_eq!(sustained_mbps(&[(4.0, 0.0), (5.0, 0.0)], WARMUP_SECS), 0.0);
+    }
+
+    #[test]
+    fn sustained_mbps_falls_back_for_short_tests() {
+        // All samples within warmup window -> still returns a positive estimate.
+        let samples = vec![(0.5, 40.0), (1.0, 60.0), (1.5, 50.0)];
+        let mbps = sustained_mbps(&samples, WARMUP_SECS);
+        assert!(mbps > 0.0, "short test should still estimate, got {mbps}");
+    }
 
     #[test]
     fn geo_str_field_extracts_and_rejects() {

@@ -380,6 +380,40 @@ impl SpeedApp {
                 .into_any_element()
         };
 
+        // Download/upload trend charts across past runs (oldest → newest).
+        let charts: gpui::AnyElement = if has_history {
+            let downloads: Vec<f32> = self
+                .history
+                .iter()
+                .rev()
+                .map(|r| r.download_mbps as f32)
+                .collect();
+            let uploads: Vec<f32> = self
+                .history
+                .iter()
+                .rev()
+                .map(|r| r.upload_mbps as f32)
+                .collect();
+            div()
+                .flex()
+                .flex_row()
+                .gap_4()
+                .w_full()
+                .child(history_trend_chart(
+                    "⬇ Download trend",
+                    &downloads,
+                    download_color(),
+                ))
+                .child(history_trend_chart(
+                    "⬆ Upload trend",
+                    &uploads,
+                    upload_color(),
+                ))
+                .into_any_element()
+        } else {
+            div().into_any_element()
+        };
+
         div()
             .flex()
             .flex_col()
@@ -391,6 +425,7 @@ impl SpeedApp {
             .border_1()
             .border_color(rgb(BLUE))
             .child(header)
+            .child(charts)
             .child(body)
     }
 }
@@ -512,6 +547,53 @@ fn setting_group(name: &str, controls: impl IntoElement) -> impl IntoElement {
                 .child(name.to_string()),
         )
         .child(controls)
+}
+
+/// A compact bar chart of a metric across past runs (oldest → newest).
+fn history_trend_chart(title: &str, values: &[f32], color: gpui::Rgba) -> impl IntoElement {
+    const H: f32 = 64.0;
+    let max = values.iter().copied().fold(1.0_f32, f32::max).max(1.0);
+    let latest = values.last().copied().unwrap_or(0.0);
+    let bars = values.iter().map(move |&v| {
+        let bh = (v / max * H).clamp(2.0, H);
+        div().w(px(7.)).h(px(bh)).bg(color).rounded_t_sm()
+    });
+
+    div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .gap_1()
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .justify_between()
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(MUTED))
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(color)
+                        .child(format!("{latest:.1} Mbps")),
+                ),
+        )
+        .child(
+            div()
+                .id(gpui::ElementId::Name(title.to_string().into()))
+                .flex()
+                .flex_row()
+                .items_end()
+                .gap(px(2.))
+                .h(px(H))
+                .w_full()
+                .overflow_x_scroll()
+                .children(bars),
+        )
 }
 
 /// A single row in the history list: date, download, upload, ping, quality.

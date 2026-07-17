@@ -135,10 +135,15 @@ Public surface: `SpeedTest`, `TestConfig`, `TestEvent`, `NetworkDiagnosticsTool`
 
 ## How it works
 
-- **Throughput** — up to 50 parallel connections with large chunks and a warmup
-  window, sampled progressively and averaged (supports gigabit+).
+- **Throughput** — measured against Cloudflare's anycast speed backend
+  (`speed.cloudflare.com`) so every one of the ~50 parallel connections
+  actually transfers data; uses a lock-free counter, excludes the TCP
+  slow-start warmup, and reports a trimmed **sustained** rate (comparable to
+  speedtest.net). Supports gigabit+; a genuine failure reports 0 rather than a
+  misleading floor.
 - **Server selection** — IP geolocation (5 providers with failover) → dynamic
-  server discovery → Haversine distance + latency scoring → best 3 servers.
+  server discovery → Haversine distance + latency scoring → best server, used
+  for **latency/ping**.
 - **Diagnostics** — gateway, DNS servers & response time, route hops, IPv6,
   interface.
 - **History** — embedded [redb](https://crates.io/crates/redb) database with
@@ -154,11 +159,12 @@ Linux, `~/Library/Application Support/netrunner/` on macOS):
 | `netrunner_history.db` | redb (binary) | speed-test history — **shared by the TUI and GUI** so past runs show up in both |
 | `settings.json` | JSON | user preferences (default server, timeouts, `auto_run`, `max_history`, …) — human-editable |
 
-The desktop app lists recent runs, has an editable **Settings** panel (server
-preset, test size, timeout, detail level) that writes straight to
-`settings.json`, an **Auto-run** toggle, and a **Clear history** button. History
-is a proper time-series in redb; JSON is reserved for small, editable settings.
-You can still export history to JSON via `HistoryStorage::export_to_json`.
+The desktop app lists recent runs with **download/upload trend charts**, has an
+editable **Settings** panel (server preset, test size, timeout, detail level)
+that writes straight to `settings.json`, an **Auto-run** toggle, and a **Clear
+history** button. History is a proper time-series in redb; JSON is reserved for
+small, editable settings. You can still export history to JSON via
+`HistoryStorage::export_to_json`.
 
 ## Development
 
