@@ -8,6 +8,7 @@
 
 def main [
     new_version: string,  # Target version (e.g. 0.7.0 or 1.0.0-beta.1)
+    --skip-checks,        # Skip cargo clippy + test (caller already ran them)
 ] {
     let red    = (ansi red)
     let green  = (ansi green)
@@ -88,34 +89,42 @@ def main [
     print $"  ($green)✔ Formatting applied($reset)"
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Step 5/8 — cargo clippy
+    # Step 5/8 — cargo clippy (skippable — the caller may have run it already)
     # ─────────────────────────────────────────────────────────────────────────
-    print $"($cyan)[5/8]($reset) Running cargo clippy …"
-    let clippy = (
-        do { run-external "cargo" "clippy" "--all-targets" "--all-features" "--" "-D" "warnings" "-A" "deprecated" }
-        | complete
-    )
-    if $clippy.exit_code != 0 {
-        print $"  ($red)✘ Clippy reported errors \(exit ($clippy.exit_code)\).($reset)"
-        print "  Fix the issues above and re-run the script."
-        exit 1
+    if $skip_checks {
+        print $"($cyan)[5/8]($reset) Skipping cargo clippy \(--skip-checks\) …"
+    } else {
+        print $"($cyan)[5/8]($reset) Running cargo clippy …"
+        let clippy = (
+            do { run-external "cargo" "clippy" "--all-targets" "--all-features" "--" "-D" "warnings" "-A" "deprecated" }
+            | complete
+        )
+        if $clippy.exit_code != 0 {
+            print $"  ($red)✘ Clippy reported errors \(exit ($clippy.exit_code)\).($reset)"
+            print "  Fix the issues above and re-run the script."
+            exit 1
+        }
+        print $"  ($green)✔ Clippy passed($reset)"
     }
-    print $"  ($green)✔ Clippy passed($reset)"
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Step 6/8 — cargo test
+    # Step 6/8 — cargo test (skippable — the caller may have run it already)
     # ─────────────────────────────────────────────────────────────────────────
-    print $"($cyan)[6/8]($reset) Running cargo test …"
-    let tests = (
-        do { run-external "cargo" "test" "--all-features" "--all-targets" }
-        | complete
-    )
-    if $tests.exit_code != 0 {
-        print $"  ($red)✘ Tests failed \(exit ($tests.exit_code)\).($reset)"
-        print "  Fix the failures above and re-run the script."
-        exit 1
+    if $skip_checks {
+        print $"($cyan)[6/8]($reset) Skipping cargo test \(--skip-checks\) …"
+    } else {
+        print $"($cyan)[6/8]($reset) Running cargo test …"
+        let tests = (
+            do { run-external "cargo" "test" "--all-features" "--all-targets" }
+            | complete
+        )
+        if $tests.exit_code != 0 {
+            print $"  ($red)✘ Tests failed \(exit ($tests.exit_code)\).($reset)"
+            print "  Fix the failures above and re-run the script."
+            exit 1
+        }
+        print $"  ($green)✔ All tests passed($reset)"
     }
-    print $"  ($green)✔ All tests passed($reset)"
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 7/8 — CHANGELOG, commit, tag

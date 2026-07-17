@@ -86,18 +86,18 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      # ── Quality gate ─────────────────────────────────────────────────────────
+      # ── Quality gate (headless: core + CLI; GPUI GUI can't build on Linux) ───
       - name: Check formatting
         if: steps.check.outputs.has_changes == 'true'
-        run: cargo fmt -- --check
+        run: cargo fmt --all -- --check
 
       - name: Run clippy
         if: steps.check.outputs.has_changes == 'true'
-        run: cargo clippy --all-targets --all-features -- -D warnings -A deprecated
+        run: cargo clippy --workspace --exclude netrunner --all-targets --all-features -- -D warnings -A deprecated
 
       - name: Run tests
         if: steps.check.outputs.has_changes == 'true'
-        run: cargo test --all-features --all-targets
+        run: cargo test --all-features --workspace --exclude netrunner --all-targets
 
       # ── Create Pull Request ──────────────────────────────────────────────────
       - name: Create Pull Request

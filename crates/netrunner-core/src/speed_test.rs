@@ -279,21 +279,25 @@ impl SpeedTest {
         );
     }
 
-    async fn try_ipapi_co(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
+    /// Fetch and parse a geolocation provider's JSON response (5s timeout).
+    async fn fetch_geo_json(
+        &self,
+        url: &str,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let response = self
             .client
-            .get("https://ipapi.co/json/")
+            .get(url)
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
-
         if !response.status().is_success() {
             return Err(format!("HTTP error: {}", response.status()).into());
         }
+        Ok(response.json().await?)
+    }
 
-        let json: serde_json::Value = response.json().await?;
-
-        // Check for API error
+    async fn try_ipapi_co(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
+        let json = self.fetch_geo_json("https://ipapi.co/json/").await?;
         if json.get("error").is_some() {
             return Err(format!(
                 "API error: {}",
@@ -301,50 +305,21 @@ impl SpeedTest {
             )
             .into());
         }
-
-        let country = json["country_name"]
-            .as_str()
-            .filter(|s| !s.is_empty() && *s != "Unknown")
-            .ok_or("Invalid country")?
-            .to_string();
-
-        let city = json["city"]
-            .as_str()
-            .filter(|s| !s.is_empty() && *s != "Unknown")
-            .ok_or("Invalid city")?
-            .to_string();
-
-        let latitude = json["latitude"].as_f64().ok_or("Invalid latitude")?;
-        let longitude = json["longitude"].as_f64().ok_or("Invalid longitude")?;
-
-        if latitude == 0.0 && longitude == 0.0 {
-            return Err("Invalid coordinates".into());
-        }
-
-        Ok(GeoLocation {
-            country,
-            city,
-            latitude,
-            longitude,
-            isp: json["org"].as_str().map(String::from),
-        })
+        build_geo(
+            geo_str_field(&json, "country_name")?,
+            geo_str_field(&json, "city")?,
+            json["latitude"].as_f64().ok_or("Invalid latitude")?,
+            json["longitude"].as_f64().ok_or("Invalid longitude")?,
+            json["org"].as_str().map(String::from),
+        )
     }
 
     async fn try_ip_api_com(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
-        let response = self
-            .client
-            .get("http://ip-api.com/json/?fields=status,message,country,city,lat,lon,isp")
-            .timeout(Duration::from_secs(5))
-            .send()
+        let json = self
+            .fetch_geo_json(
+                "http://ip-api.com/json/?fields=status,message,country,city,lat,lon,isp",
+            )
             .await?;
-
-        if !response.status().is_success() {
-            return Err(format!("HTTP error: {}", response.status()).into());
-        }
-
-        let json: serde_json::Value = response.json().await?;
-
-        // Check for API error
         if json["status"].as_str() != Some("success") {
             return Err(format!(
                 "API error: {}",
@@ -352,140 +327,42 @@ impl SpeedTest {
             )
             .into());
         }
-
-        let country = json["country"]
-            .as_str()
-            .filter(|s| !s.is_empty() && *s != "Unknown")
-            .ok_or("Invalid country")?
-            .to_string();
-
-        let city = json["city"]
-            .as_str()
-            .filter(|s| !s.is_empty() && *s != "Unknown")
-            .ok_or("Invalid city")?
-            .to_string();
-
-        let latitude = json["lat"].as_f64().ok_or("Invalid latitude")?;
-        let longitude = json["lon"].as_f64().ok_or("Invalid longitude")?;
-
-        if latitude == 0.0 && longitude == 0.0 {
-            return Err("Invalid coordinates".into());
-        }
-
-        Ok(GeoLocation {
-            country,
-            city,
-            latitude,
-            longitude,
-            isp: json["isp"].as_str().map(String::from),
-        })
+        build_geo(
+            geo_str_field(&json, "country")?,
+            geo_str_field(&json, "city")?,
+            json["lat"].as_f64().ok_or("Invalid latitude")?,
+            json["lon"].as_f64().ok_or("Invalid longitude")?,
+            json["isp"].as_str().map(String::from),
+        )
     }
 
     async fn try_ipinfo_io(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
-        let response = self
-            .client
-            .get("https://ipinfo.io/json")
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(format!("HTTP error: {}", response.status()).into());
-        }
-
-        let json: serde_json::Value = response.json().await?;
-
-        let country = json["country"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid country")?
-            .to_string();
-
-        let city = json["city"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid city")?
-            .to_string();
-
-        // ipinfo.io returns "lat,lon" in the "loc" field
-        let loc = json["loc"].as_str().ok_or("Invalid location")?;
-        let coords: Vec<&str> = loc.split(',').collect();
-        if coords.len() != 2 {
-            return Err("Invalid coordinates format".into());
-        }
-
-        let latitude: f64 = coords[0].parse().map_err(|_| "Invalid latitude")?;
-        let longitude: f64 = coords[1].parse().map_err(|_| "Invalid longitude")?;
-
-        if latitude == 0.0 && longitude == 0.0 {
-            return Err("Invalid coordinates".into());
-        }
-
-        Ok(GeoLocation {
-            country,
-            city,
+        let json = self.fetch_geo_json("https://ipinfo.io/json").await?;
+        // ipinfo.io returns "lat,lon" in the "loc" field.
+        let (latitude, longitude) =
+            parse_latlon_pair(json["loc"].as_str().ok_or("Invalid location")?)?;
+        build_geo(
+            geo_str_field(&json, "country")?,
+            geo_str_field(&json, "city")?,
             latitude,
             longitude,
-            isp: json["org"].as_str().map(String::from),
-        })
+            json["org"].as_str().map(String::from),
+        )
     }
 
     async fn try_freegeoip_app(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
-        let response = self
-            .client
-            .get("https://freegeoip.app/json/")
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(format!("HTTP error: {}", response.status()).into());
-        }
-
-        let json: serde_json::Value = response.json().await?;
-
-        let country = json["country_name"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid country")?
-            .to_string();
-
-        let city = json["city"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid city")?
-            .to_string();
-
-        let latitude = json["latitude"].as_f64().ok_or("Invalid latitude")?;
-        let longitude = json["longitude"].as_f64().ok_or("Invalid longitude")?;
-
-        if latitude == 0.0 && longitude == 0.0 {
-            return Err("Invalid coordinates".into());
-        }
-
-        Ok(GeoLocation {
-            country,
-            city,
-            latitude,
-            longitude,
-            isp: None,
-        })
+        let json = self.fetch_geo_json("https://freegeoip.app/json/").await?;
+        build_geo(
+            geo_str_field(&json, "country_name")?,
+            geo_str_field(&json, "city")?,
+            json["latitude"].as_f64().ok_or("Invalid latitude")?,
+            json["longitude"].as_f64().ok_or("Invalid longitude")?,
+            None,
+        )
     }
 
     async fn try_ipwhois_app(&self) -> Result<GeoLocation, Box<dyn std::error::Error>> {
-        let response = self
-            .client
-            .get("https://ipwho.is/")
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            return Err(format!("HTTP error: {}", response.status()).into());
-        }
-
-        let json: serde_json::Value = response.json().await?;
-
+        let json = self.fetch_geo_json("https://ipwho.is/").await?;
         if !json["success"].as_bool().unwrap_or(false) {
             return Err(format!(
                 "API error: {}",
@@ -493,33 +370,13 @@ impl SpeedTest {
             )
             .into());
         }
-
-        let country = json["country"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid country")?
-            .to_string();
-
-        let city = json["city"]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid city")?
-            .to_string();
-
-        let latitude = json["latitude"].as_f64().ok_or("Invalid latitude")?;
-        let longitude = json["longitude"].as_f64().ok_or("Invalid longitude")?;
-
-        if latitude == 0.0 && longitude == 0.0 {
-            return Err("Invalid coordinates".into());
-        }
-
-        Ok(GeoLocation {
-            country,
-            city,
-            latitude,
-            longitude,
-            isp: json["connection"]["isp"].as_str().map(String::from),
-        })
+        build_geo(
+            geo_str_field(&json, "country")?,
+            geo_str_field(&json, "city")?,
+            json["latitude"].as_f64().ok_or("Invalid latitude")?,
+            json["longitude"].as_f64().ok_or("Invalid longitude")?,
+            json["connection"]["isp"].as_str().map(String::from),
+        )
     }
 
     /// Build a comprehensive server pool based on location
@@ -1574,9 +1431,79 @@ impl SpeedTest {
     }
 }
 
+/// Extract a required, non-empty geolocation string field (rejects "Unknown").
+fn geo_str_field(
+    json: &serde_json::Value,
+    key: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    json[key]
+        .as_str()
+        .filter(|s| !s.is_empty() && *s != "Unknown")
+        .map(str::to_string)
+        .ok_or_else(|| format!("Invalid {key}").into())
+}
+
+/// Parse a `"lat,lon"` pair (as returned by ipinfo.io's `loc` field).
+fn parse_latlon_pair(loc: &str) -> Result<(f64, f64), Box<dyn std::error::Error>> {
+    let coords: Vec<&str> = loc.split(',').collect();
+    if coords.len() != 2 {
+        return Err("Invalid coordinates format".into());
+    }
+    let lat = coords[0].trim().parse().map_err(|_| "Invalid latitude")?;
+    let lon = coords[1].trim().parse().map_err(|_| "Invalid longitude")?;
+    Ok((lat, lon))
+}
+
+/// Validate coordinates and assemble a [`GeoLocation`].
+///
+/// `(0, 0)` is treated as invalid (a common "unknown location" sentinel).
+fn build_geo(
+    country: String,
+    city: String,
+    latitude: f64,
+    longitude: f64,
+    isp: Option<String>,
+) -> Result<GeoLocation, Box<dyn std::error::Error>> {
+    if latitude == 0.0 && longitude == 0.0 {
+        return Err("Invalid coordinates".into());
+    }
+    Ok(GeoLocation {
+        country,
+        city,
+        latitude,
+        longitude,
+        isp,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn geo_str_field_extracts_and_rejects() {
+        let json = serde_json::json!({ "city": "Berlin", "empty": "", "unk": "Unknown" });
+        assert_eq!(geo_str_field(&json, "city").unwrap(), "Berlin");
+        assert!(geo_str_field(&json, "empty").is_err());
+        assert!(geo_str_field(&json, "unk").is_err());
+        assert!(geo_str_field(&json, "missing").is_err());
+    }
+
+    #[test]
+    fn parse_latlon_pair_ok_and_err() {
+        assert_eq!(parse_latlon_pair("52.52,13.40").unwrap(), (52.52, 13.40));
+        assert_eq!(parse_latlon_pair(" 1.0 , 2.0 ").unwrap(), (1.0, 2.0));
+        assert!(parse_latlon_pair("52.52").is_err());
+        assert!(parse_latlon_pair("a,b").is_err());
+    }
+
+    #[test]
+    fn build_geo_rejects_zero_coords() {
+        assert!(build_geo("C".into(), "City".into(), 0.0, 0.0, None).is_err());
+        let g = build_geo("C".into(), "City".into(), 1.0, 2.0, Some("ISP".into())).unwrap();
+        assert_eq!(g.latitude, 1.0);
+        assert_eq!(g.isp.as_deref(), Some("ISP"));
+    }
 
     #[test]
     fn test_region_determination() {

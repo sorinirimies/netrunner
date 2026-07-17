@@ -254,9 +254,11 @@ _check-version-changed version: _check-nu
 
 # Bump the workspace version, regenerate Cargo.lock + CHANGELOG.md, commit, tag and push.
 
-# Validation runs first (cheap), quality gate runs second (expensive).
-bump version: (_check-version-changed version) check-release _check-git-cliff
-    nu scripts/bump_version.nu {{ version }}
+# The quality gate (check-all) runs once here; bump_version.nu then skips its own
+# clippy/test so `just release` doesn't run the suite twice. CI re-runs the full
+# gate on the pushed tag.
+bump version: (_check-version-changed version) check-all _check-git-cliff
+    nu scripts/bump_version.nu --skip-checks {{ version }}
 
 # ── Publish (crates.io) ───────────────────────────────────────────────────────
 
