@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2.0.1 - 2026-07-17
+### 🐛 Bug Fixes
+- fix(gui): make run-history persistence robust and visible
+### 📚 Documentation
+- docs: update README and CHANGELOG for v2.0.0
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.0...v2.0.1
 ## 2.0.0 - 2026-07-15
 ### ✨ Features
 - feat(gui): show run history + JSON settings; add core Settings type
