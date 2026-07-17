@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 - fix(gui): make run-history persistence robust and visible
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v2.0.0
+### 🔧 Chores
+- chore(release): v2.0.1
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.0...v2.0.1
 ## 2.0.0 - 2026-07-15
 ### ✨ Features
