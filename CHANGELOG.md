@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 - fix(core): migrate over stale sled history directory (redb open failure)
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v2.0.2
+### 🔧 Chores
+- chore: bump version to 2.0.3
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.2...v2.0.3
 ## 2.0.2 - 2026-07-17
 ### 📚 Documentation
