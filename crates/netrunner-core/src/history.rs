@@ -87,7 +87,19 @@ impl HistoryStorage {
             .join("netrunner");
 
         std::fs::create_dir_all(&config_dir)?;
-        Ok(config_dir.join(DB_NAME))
+        let db_path = config_dir.join(DB_NAME);
+
+        // Migration guard: old (pre-redb) versions stored history in a *sled*
+        // database, which is a DIRECTORY at this same path. redb needs a file,
+        // so `Database::create` would fail with "Is a directory". The sled data
+        // is unreadable by current code (the dependency was removed), so remove
+        // the stale directory to unblock redb. A real redb database is a file,
+        // never a directory, so this never deletes valid history.
+        if db_path.is_dir() {
+            let _ = std::fs::remove_dir_all(&db_path);
+        }
+
+        Ok(db_path)
     }
 
     /// Save a test result
@@ -675,6 +687,39 @@ mod tests {
     use super::*;
     use crate::types::ConnectionQuality;
     use tempfile::tempdir;
+
+    #[test]
+    fn migrates_over_stale_sled_directory() {
+        // Old (pre-redb) installs left a sled DB *directory* at the redb path.
+        // Opening must remove it and create a working redb file.
+        let tmp = std::env::temp_dir().join(format!("nr_sled_migrate_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("HOME", &tmp);
+        std::env::set_var("XDG_CONFIG_HOME", tmp.join(".config"));
+
+        // Fabricate a stale sled-style directory at the DB path.
+        let cfg = dirs::config_dir().unwrap().join("netrunner");
+        std::fs::create_dir_all(&cfg).unwrap();
+        let stale = cfg.join(DB_NAME);
+        std::fs::create_dir_all(stale.join("blobs")).unwrap();
+        std::fs::write(stale.join("conf"), b"stale").unwrap();
+        assert!(stale.is_dir(), "precondition: stale sled dir exists");
+
+        let store = HistoryStorage::new().expect("should open after migrating");
+        let r = SpeedTestResult {
+            download_mbps: 42.0,
+            ..Default::default()
+        };
+        store.save_result(&r).unwrap();
+        assert_eq!(store.get_recent_results(10).unwrap().len(), 1);
+        assert!(
+            HistoryStorage::get_db_path().unwrap().is_file(),
+            "redb path should now be a file"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn test_storage_creation() {
