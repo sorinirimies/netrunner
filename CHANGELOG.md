@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2.0.3 - 2026-07-17
+### 🐛 Bug Fixes
+- fix(core): migrate over stale sled history directory (redb open failure)
+### 📚 Documentation
+- docs: update README and CHANGELOG for v2.0.2
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.2...v2.0.3
 ## 2.0.2 - 2026-07-17
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v2.0.1
