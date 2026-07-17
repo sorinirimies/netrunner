@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 - fix(core): accurate throughput + GUI history trend charts
 ### 📚 Documentation
 - docs: update README and CHANGELOG for v2.0.3
+### 🔧 Chores
+- chore: bump version to 2.0.4
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.3...v2.0.4
 ## 2.0.3 - 2026-07-17
 ### 🐛 Bug Fixes
