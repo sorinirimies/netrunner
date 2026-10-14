@@ -435,6 +435,12 @@ setup-gitea url: _check-nu
 migrate-gitea: _check-nu
     nu scripts/migrate_to_gitea.nu
 
-# Security: dependency vulnerability scan (needs `cargo install cargo-audit`)
+# ── Security ──────────────────────────────────────────────────────────────────
+
+# Check advisories, licenses, bans, sources
+deny:
+    cargo deny check
+
+# Audit dependencies for known vulnerabilities
 audit:
     cargo audit
