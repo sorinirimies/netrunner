@@ -354,9 +354,15 @@ push-gitea:
 # Push the current branch to all remotes (continues on failure)
 push-all:
     #!/usr/bin/env sh
+    git_try() {
+        r=$1; shift
+        if git remote get-url "$r" >/dev/null 2>&1; then "$@"; else echo "↷ skipping $r (not configured here; add with: git remote add $r <url>)"; skipped="$skipped $r"; fi
+    }
+    skipped=""
     failed=""
-    git push origin main   || failed="$failed origin"
-    git push gitea main    || failed="$failed gitea"
+    git_try origin git push origin main   || failed="$failed origin"
+    git_try gitea git push gitea main    || failed="$failed gitea"
+    if [ -n "$skipped" ]; then echo "ℹ️  Skipped (not configured):$skipped"; fi
     if [ -n "$failed" ]; then
         echo "⚠️  Failed to push to:$failed"
     else
@@ -378,9 +384,15 @@ push-tags:
 # Push all tags to all remotes (continues on failure)
 push-tags-all:
     #!/usr/bin/env sh
+    git_try() {
+        r=$1; shift
+        if git remote get-url "$r" >/dev/null 2>&1; then "$@"; else echo "↷ skipping $r (not configured here; add with: git remote add $r <url>)"; skipped="$skipped $r"; fi
+    }
+    skipped=""
     failed=""
-    git push origin --tags   || failed="$failed origin"
-    git push gitea --tags    || failed="$failed gitea"
+    git_try origin git push origin --tags   || failed="$failed origin"
+    git_try gitea git push gitea --tags    || failed="$failed gitea"
+    if [ -n "$skipped" ]; then echo "ℹ️  Skipped (not configured):$skipped"; fi
     if [ -n "$failed" ]; then
         echo "⚠️  Failed to push tags to:$failed"
     else
@@ -399,10 +411,16 @@ release version: (bump version)
 # Bump, commit, tag, then push to all remotes (continues on failure).
 release-all version: (bump version)
     #!/usr/bin/env sh
+    git_try() {
+        r=$1; shift
+        if git remote get-url "$r" >/dev/null 2>&1; then "$@"; else echo "↷ skipping $r (not configured here; add with: git remote add $r <url>)"; skipped="$skipped $r"; fi
+    }
+    skipped=""
     echo "Pushing release v{{ version }} to all remotes…"
     failed=""
-    git push --follow-tags origin main   || failed="$failed origin"
-    git push --follow-tags gitea main    || failed="$failed gitea"
+    git_try origin git push --follow-tags origin main   || failed="$failed origin"
+    git_try gitea git push --follow-tags gitea main    || failed="$failed gitea"
+    if [ -n "$skipped" ]; then echo "ℹ️  Skipped (not configured):$skipped"; fi
     if [ -n "$failed" ]; then
         echo "⚠️  Release v{{ version }} failed to push to:$failed"
     else
