@@ -326,7 +326,7 @@ update-deps:
     @echo "✅ All checks passed — committing dependency updates…"
     git add Cargo.lock
     git diff --cached --quiet || git commit -m "chore: update dependencies"
-    git push origin main
+    git push origin "$(git branch --show-current)"
     @echo "✅ Dependency updates pushed to GitHub."
 
 # Show outdated dependencies (requires cargo-outdated)
@@ -345,11 +345,11 @@ remotes:
 
 # Push the current branch to GitHub (origin)
 push:
-    git push origin main
+    git push origin "$(git branch --show-current)"
 
 # Push the current branch to Gitea
 push-gitea:
-    git push gitea main
+    git push gitea "$(git branch --show-current)"
 
 # Push the current branch to all remotes (continues on failure)
 push-all:
@@ -360,8 +360,8 @@ push-all:
     }
     skipped=""
     failed=""
-    git_try origin git push origin main   || failed="$failed origin"
-    git_try gitea git push gitea main    || failed="$failed gitea"
+    git_try origin git push origin "$(git branch --show-current)"   || failed="$failed origin"
+    git_try gitea git push gitea "$(git branch --show-current)"    || failed="$failed gitea"
     if [ -n "$skipped" ]; then echo "ℹ️  Skipped (not configured):$skipped"; fi
     if [ -n "$failed" ]; then
         echo "⚠️  Failed to push to:$failed"
@@ -371,11 +371,11 @@ push-all:
 
 # Pull the current branch from GitHub (origin)
 pull:
-    git pull origin main
+    git pull origin "$(git branch --show-current)"
 
 # Pull the current branch from Gitea
 pull-gitea:
-    git pull gitea main
+    git pull gitea "$(git branch --show-current)"
 
 # Push all tags to GitHub
 push-tags:
@@ -404,7 +404,7 @@ push-tags-all:
 # Bump, commit, tag, then push to GitHub — triggers the Release workflow.
 release version: (bump version)
     @echo "Pushing release v{{ version }} to GitHub…"
-    git push --follow-tags origin main
+    git push --follow-tags origin "$(git branch --show-current)"
     @echo "✅ Release v{{ version }} pushed — the Release workflow will trigger automatically."
     @echo "   https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]//' | sed 's/\.git//')/actions"
 
@@ -418,8 +418,8 @@ release-all version: (bump version)
     skipped=""
     echo "Pushing release v{{ version }} to all remotes…"
     failed=""
-    git_try origin git push --follow-tags origin main   || failed="$failed origin"
-    git_try gitea git push --follow-tags gitea main    || failed="$failed gitea"
+    git_try origin git push --follow-tags origin "$(git branch --show-current)"   || failed="$failed origin"
+    git_try gitea git push --follow-tags gitea "$(git branch --show-current)"    || failed="$failed gitea"
     if [ -n "$skipped" ]; then echo "ℹ️  Skipped (not configured):$skipped"; fi
     if [ -n "$failed" ]; then
         echo "⚠️  Release v{{ version }} failed to push to:$failed"
@@ -441,7 +441,7 @@ release-retrigger version:
 
 # Force-sync Gitea with GitHub
 sync-gitea:
-    git push gitea main --force
+    git push gitea "$(git branch --show-current)" --force
     git push gitea --tags --force
     @echo "✅ Gitea force-synced with GitHub."
 
