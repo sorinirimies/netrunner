@@ -44,6 +44,11 @@ jobs:
       # [dependencies] so pinned libs like `clap = "4.6"` can advance to "5.0",
       # `tokio = "1.50"` to "2.0", etc.
       # `cargo update` then resolves the new constraints into Cargo.lock.
+      # Snapshot dependency requirements as data: a patch release is cut ONLY when
+      # `cargo upgrade` really changed one (it also reformats manifests, which must not count).
+      - name: Snapshot dependency requirements (before)
+        run: cargo metadata --no-deps --format-version 1 | jq -S -c '[.packages[].dependencies[] | {name,req,kind,features,optional,target,uses_default_features}] | sort_by(.name,.kind,.target)' > "$RUNNER_TEMP/reqs-before.json"
+
       - name: Upgrade dependency pins
         run: cargo upgrade --incompatible allow
 
@@ -54,10 +59,23 @@ jobs:
       - name: Check for changes
         id: check
         run: |
-          if git diff --quiet Cargo.toml Cargo.lock; then
+          if git diff --quiet Cargo.lock; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check for dependency requirement changes
+        id: reqs
+        run: |
+          cargo metadata --no-deps --format-version 1 | jq -S -c '[.packages[].dependencies[] | {name,req,kind,features,optional,target,uses_default_features}] | sort_by(.name,.kind,.target)' > "$RUNNER_TEMP/reqs-after.json"
+          if cmp -s "$RUNNER_TEMP/reqs-before.json" "$RUNNER_TEMP/reqs-after.json"; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            # Lock-only: drop cosmetic manifest reformatting from cargo-edit.
+            git ls-files -m -- '*Cargo.toml' | xargs -r git checkout --
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "Cargo.toml dependency requirements changed -> patch release."
           fi
 
       # ── Quality gate ─────────────────────────────────────────────────────────
@@ -94,6 +112,7 @@ jobs:
       # ── Create PR via Gitea API + auto-merge ─────────────────────────────────
       # The full quality gate already passed above, so merging is safe.
       - name: Create and auto-merge Pull Request
+        id: merge-pr
         if: steps.check.outputs.has_changes == 'true'
         run: |
           BRANCH="deps/nightly-dependency-upgrade"
@@ -144,9 +163,50 @@ jobs:
               \"delete_branch_after_merge\": true
             }"
 
+          # Gitea answers 204 on this endpoint once the PR is merged.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API}/repos/${REPO}/pulls/${PR_NUMBER}/merge")
+          if [ "$CODE" != "204" ]; then
+            echo "PR #${PR_NUMBER} is not merged (HTTP ${CODE}) - no release cut." >&2
+            exit 1
+          fi
           echo "✅ PR #${PR_NUMBER} merged and branch deleted."
+          echo "merged=true" >> "$GITHUB_OUTPUT"
         env:
           GITEA_TOKEN: ${{ secrets.GITEA_TOKEN || github.token }}
+
+      # ── Patch release: ONLY when a Cargo.toml dependency requirement changed ─────
+      # A lockfile-only upgrade was merged above WITHOUT a version bump.
+      - name: Install nushell
+        if: steps.merge-pr.outputs.merged == 'true' && steps.reqs.outputs.release == 'true'
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "0.111.0"
+
+      - name: Install git-cliff
+        if: steps.merge-pr.outputs.merged == 'true' && steps.reqs.outputs.release == 'true'
+        run: command -v git-cliff >/dev/null || cargo install git-cliff --locked
+
+      - name: Bump patch version, tag and push
+        if: steps.merge-pr.outputs.merged == 'true' && steps.reqs.outputs.release == 'true'
+        run: |
+          git config user.name  "gitea-actions[bot]"
+          git config user.email "gitea-actions[bot]@noreply.gitea"
+          git fetch origin main
+          git checkout -B main origin/main
+          current=$(nu scripts/version.nu)
+          IFS='.' read -r major minor patch <<< "$current"
+          next="$major.$minor.$((patch + 1))"
+          while git rev-parse -q --verify "refs/tags/v$next" >/dev/null; do
+            patch=$((patch + 1))
+            next="$major.$minor.$((patch + 1))"
+          done
+          echo "Releasing $current -> $next"
+          nu scripts/bump_version.nu --yes --skip-checks "$next"
+          git push origin HEAD:main
+          git push origin "v$next"
+
 
       - name: Nothing to update
         if: steps.check.outputs.has_changes == 'false'
