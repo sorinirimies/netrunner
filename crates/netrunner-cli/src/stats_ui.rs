@@ -26,16 +26,52 @@ use tui_piechart::{symbols, LegendAlignment, LegendLayout, LegendPosition, PieCh
 use netrunner_core::{HistoryStorage, SpeedTestResult, TestStatistics};
 
 // ── Cyberpunk colour palette ─────────────────────────────────────────────────
-const COLOR_CYAN: Color = Color::Rgb(0, 255, 255);
-const COLOR_MAGENTA: Color = Color::Rgb(255, 0, 255);
-const COLOR_GREEN: Color = Color::Rgb(0, 255, 128);
-const COLOR_YELLOW: Color = Color::Rgb(255, 220, 0);
-const COLOR_ORANGE: Color = Color::Rgb(255, 140, 0);
-const COLOR_RED: Color = Color::Rgb(255, 60, 60);
-const COLOR_BLUE: Color = Color::Rgb(60, 140, 255);
+/// Colours of the active `tui-nuances` theme (set before every draw).
+#[derive(Clone, Copy)]
+struct Pal {
+    cyan: Color,
+    magenta: Color,
+    green: Color,
+    yellow: Color,
+    orange: Color,
+    red: Color,
+    blue: Color,
+    dim: Color,
+    panel_bg: Color,
+}
 
-const COLOR_DIM: Color = Color::Rgb(80, 80, 100);
-const COLOR_PANEL_BG: Color = Color::Rgb(10, 10, 20);
+impl Pal {
+    fn of(t: &tui_nuances::Theme) -> Self {
+        Self {
+            cyan: t.accent,
+            magenta: t.secondary,
+            green: t.success,
+            yellow: t.warning,
+            orange: tui_nuances::color::mix(t.warning, t.error, 0.5),
+            red: t.error,
+            blue: t.info,
+            dim: t.muted,
+            panel_bg: t.background.unwrap_or(Color::Reset),
+        }
+    }
+}
+
+thread_local! {
+    static PAL: std::cell::Cell<Pal> = std::cell::Cell::new(Pal::of(&initial_theme()));
+}
+
+fn pal() -> Pal {
+    PAL.with(std::cell::Cell::get)
+}
+
+/// `NETRUNNER_THEME` if set and valid, otherwise the neon `cyberpunk` theme.
+fn initial_theme() -> tui_nuances::Theme {
+    std::env::var("NETRUNNER_THEME")
+        .ok()
+        .and_then(|n| tui_nuances::Theme::by_name(&n))
+        .or_else(|| tui_nuances::Theme::by_name("cyberpunk"))
+        .unwrap_or_default()
+}
 
 /// Which chart panel is currently focused
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +108,7 @@ struct StatsApp {
     recent_results: Vec<SpeedTestResult>,
     focus: Focus,
     scroll: usize,
+    theme: tui_nuances::Theme,
 }
 
 impl StatsApp {
@@ -81,6 +118,7 @@ impl StatsApp {
             recent_results,
             focus: Focus::Download,
             scroll: 0,
+            theme: initial_theme(),
         }
     }
 
@@ -155,6 +193,7 @@ fn run_stats_loop(
     app: &mut StatsApp,
 ) -> io::Result<()> {
     loop {
+        PAL.with(|p| p.set(Pal::of(&app.theme)));
         terminal.draw(|frame| render_stats(frame, app))?;
 
         if event::poll(Duration::from_millis(50))? {
@@ -167,6 +206,8 @@ fn run_stats_loop(
                     KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
                         app.focus = app.focus.prev();
                     }
+                    KeyCode::Char('t') => app.theme = app.theme.next(),
+                    KeyCode::Char('T') => app.theme = app.theme.prev(),
                     KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
                     KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
                     _ => {}
@@ -184,7 +225,7 @@ fn render_stats(frame: &mut ratatui::Frame, app: &StatsApp) {
 
     // Background fill
     frame.render_widget(
-        Block::default().style(Style::default().bg(COLOR_PANEL_BG)),
+        Block::default().style(Style::default().bg(pal().panel_bg)),
         area,
     );
 
@@ -204,23 +245,23 @@ fn render_stats(frame: &mut ratatui::Frame, app: &StatsApp) {
 fn render_header(frame: &mut ratatui::Frame, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_CYAN))
-        .style(Style::default().bg(COLOR_PANEL_BG));
+        .border_style(Style::default().fg(pal().cyan))
+        .style(Style::default().bg(pal().panel_bg));
 
     let text = Paragraph::new(Line::from(vec![
-        Span::styled("⟨⟨⟨ ", Style::default().fg(COLOR_CYAN)),
+        Span::styled("⟨⟨⟨ ", Style::default().fg(pal().cyan)),
         Span::styled(
             "NETRUNNER",
             Style::default()
-                .fg(COLOR_MAGENTA)
+                .fg(pal().magenta)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" // ", Style::default().fg(COLOR_DIM)),
+        Span::styled(" // ", Style::default().fg(pal().dim)),
         Span::styled(
             "STATISTICS DASHBOARD",
-            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+            Style::default().fg(pal().cyan).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" ⟩⟩⟩", Style::default().fg(COLOR_CYAN)),
+        Span::styled(" ⟩⟩⟩", Style::default().fg(pal().cyan)),
     ]))
     .alignment(Alignment::Center)
     .block(block);
@@ -231,15 +272,17 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect) {
 fn render_footer(frame: &mut ratatui::Frame, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_DIM))
-        .style(Style::default().bg(COLOR_PANEL_BG));
+        .border_style(Style::default().fg(pal().dim))
+        .style(Style::default().bg(pal().panel_bg));
 
     let text = Line::from(vec![
-        Span::styled("Tab/←/→", Style::default().fg(COLOR_YELLOW).bold()),
+        Span::styled("Tab/←/→", Style::default().fg(pal().yellow).bold()),
         Span::raw("  Switch chart   "),
-        Span::styled("↑/↓", Style::default().fg(COLOR_YELLOW).bold()),
+        Span::styled("↑/↓", Style::default().fg(pal().yellow).bold()),
         Span::raw("  Scroll results   "),
-        Span::styled("q / Esc", Style::default().fg(COLOR_YELLOW).bold()),
+        Span::styled("t/T", Style::default().fg(pal().yellow).bold()),
+        Span::raw("  Theme   "),
+        Span::styled("q / Esc", Style::default().fg(pal().yellow).bold()),
         Span::raw("  Quit"),
     ]);
 
@@ -280,9 +323,9 @@ fn render_chart_grid(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
 /// Build a styled block for a chart cell, highlighted when focused.
 fn chart_block<'a>(title: &'a str, focused: bool) -> Block<'a> {
     let (border_color, title_color) = if focused {
-        (COLOR_CYAN, COLOR_CYAN)
+        (pal().cyan, pal().cyan)
     } else {
-        (COLOR_DIM, Color::Gray)
+        (pal().dim, Color::Gray)
     };
 
     Block::default()
@@ -296,7 +339,7 @@ fn chart_block<'a>(title: &'a str, focused: bool) -> Block<'a> {
             Modifier::empty()
         }))
         .padding(Padding::new(1, 1, 0, 0))
-        .style(Style::default().bg(COLOR_PANEL_BG))
+        .style(Style::default().bg(pal().panel_bg))
 }
 
 // ── Download speed distribution ───────────────────────────────────────────────
@@ -385,10 +428,10 @@ fn render_ping_chart(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
     }
 
     let slices: Vec<PieSlice<'static>> = [
-        ("< 20 ms", great as f64, COLOR_GREEN),
-        ("20–50 ms", good as f64, COLOR_CYAN),
-        ("50–100 ms", fair as f64, COLOR_YELLOW),
-        ("> 100 ms", poor as f64, COLOR_RED),
+        ("< 20 ms", great as f64, pal().green),
+        ("20–50 ms", good as f64, pal().cyan),
+        ("50–100 ms", fair as f64, pal().yellow),
+        ("> 100 ms", poor as f64, pal().red),
     ]
     .into_iter()
     .filter(|(_, v, _)| *v > 0.0)
@@ -396,7 +439,7 @@ fn render_ping_chart(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
     .collect();
 
     let slices = if slices.is_empty() {
-        vec![PieSlice::new("No data", 1.0, COLOR_DIM)]
+        vec![PieSlice::new("No data", 1.0, pal().dim)]
     } else {
         slices
     };
@@ -457,11 +500,11 @@ fn render_quality_chart(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) 
     }
 
     let slices: Vec<PieSlice<'static>> = [
-        ("Excellent", excellent as f64, COLOR_GREEN),
-        ("Good", good as f64, COLOR_CYAN),
-        ("Average", average as f64, COLOR_YELLOW),
-        ("Poor", poor as f64, COLOR_ORANGE),
-        ("Failed", failed as f64, COLOR_RED),
+        ("Excellent", excellent as f64, pal().green),
+        ("Good", good as f64, pal().cyan),
+        ("Average", average as f64, pal().yellow),
+        ("Poor", poor as f64, pal().orange),
+        ("Failed", failed as f64, pal().red),
     ]
     .into_iter()
     .filter(|(_, v, _)| *v > 0.0)
@@ -469,7 +512,7 @@ fn render_quality_chart(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) 
     .collect();
 
     let slices = if slices.is_empty() {
-        vec![PieSlice::new("No data", 1.0, COLOR_DIM)]
+        vec![PieSlice::new("No data", 1.0, pal().dim)]
     } else {
         slices
     };
@@ -511,14 +554,14 @@ fn render_summary(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
         .title(" 📊  Summary Statistics ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_MAGENTA))
+        .border_style(Style::default().fg(pal().magenta))
         .title_style(
             Style::default()
-                .fg(COLOR_MAGENTA)
+                .fg(pal().magenta)
                 .add_modifier(Modifier::BOLD),
         )
         .padding(Padding::horizontal(1))
-        .style(Style::default().bg(COLOR_PANEL_BG));
+        .style(Style::default().bg(pal().panel_bg));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -526,12 +569,12 @@ fn render_summary(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
     let label = |text: &str| -> Span<'static> {
         Span::styled(
             text.to_owned(),
-            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+            Style::default().fg(pal().cyan).add_modifier(Modifier::BOLD),
         )
     };
     let value =
         |text: String| -> Span<'static> { Span::styled(text, Style::default().fg(Color::White)) };
-    let sep = || -> Span<'static> { Span::styled("  │  ", Style::default().fg(COLOR_DIM)) };
+    let sep = || -> Span<'static> { Span::styled("  │  ", Style::default().fg(pal().dim)) };
 
     let test_count_str = if s.test_count == 1 {
         format!("{} test", s.test_count)
@@ -590,9 +633,9 @@ fn render_results_table(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) 
         .title(" 🗂  Recent Results ")
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_BLUE))
-        .title_style(Style::default().fg(COLOR_BLUE).add_modifier(Modifier::BOLD))
-        .style(Style::default().bg(COLOR_PANEL_BG));
+        .border_style(Style::default().fg(pal().blue))
+        .title_style(Style::default().fg(pal().blue).add_modifier(Modifier::BOLD))
+        .style(Style::default().bg(pal().panel_bg));
 
     if app.recent_results.is_empty() {
         let paragraph = Paragraph::new("No results recorded yet.")
@@ -607,7 +650,7 @@ fn render_results_table(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) 
         .map(|h| {
             Cell::from(*h).style(
                 Style::default()
-                    .fg(COLOR_YELLOW)
+                    .fg(pal().yellow)
                     .add_modifier(Modifier::BOLD),
             )
         });
@@ -648,9 +691,9 @@ fn render_results_table(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) 
         .title(scroll_hint)
         .title_alignment(Alignment::Center)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_BLUE))
-        .title_style(Style::default().fg(COLOR_BLUE).add_modifier(Modifier::BOLD))
-        .style(Style::default().bg(COLOR_PANEL_BG));
+        .border_style(Style::default().fg(pal().blue))
+        .title_style(Style::default().fg(pal().blue).add_modifier(Modifier::BOLD))
+        .style(Style::default().bg(pal().panel_bg));
 
     let widths = [
         Constraint::Length(12),
@@ -708,10 +751,10 @@ fn bucket_speeds(
 /// Slices with zero value are omitted. Falls back to a single "No data" slice.
 fn build_speed_slices(ultra: u32, fast: u32, moderate: u32, slow: u32) -> Vec<PieSlice<'static>> {
     let candidates: [(&'static str, f64, Color); 4] = [
-        ("Ultra", ultra as f64, COLOR_GREEN),
-        ("Fast", fast as f64, COLOR_CYAN),
-        ("Moderate", moderate as f64, COLOR_YELLOW),
-        ("Slow", slow as f64, COLOR_RED),
+        ("Ultra", ultra as f64, pal().green),
+        ("Fast", fast as f64, pal().cyan),
+        ("Moderate", moderate as f64, pal().yellow),
+        ("Slow", slow as f64, pal().red),
     ];
 
     let slices: Vec<PieSlice<'static>> = candidates
@@ -721,7 +764,7 @@ fn build_speed_slices(ultra: u32, fast: u32, moderate: u32, slow: u32) -> Vec<Pi
         .collect();
 
     if slices.is_empty() {
-        vec![PieSlice::new("No data", 1.0, COLOR_DIM)]
+        vec![PieSlice::new("No data", 1.0, pal().dim)]
     } else {
         slices
     }

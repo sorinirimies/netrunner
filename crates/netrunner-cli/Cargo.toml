@@ -39,6 +39,7 @@ colored = { workspace = true }
 console = { workspace = true }
 dialoguer = { workspace = true }
 ratatui = { workspace = true }
+tui-nuances = { workspace = true }
 crossterm = { workspace = true }
 tachyonfx = { workspace = true }
 humantime = { workspace = true }
