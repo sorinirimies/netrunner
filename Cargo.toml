@@ -51,7 +51,9 @@ ctrlc = "3.5"
 async-trait = "0.1"
 prettytable-rs = "0.10"
 ratatui-widgets = "0.3"
-tui-piechart = "0.3.1"
+tui-piechart = { version = "1.4", features = ["theme"] }
+tui-chart = { version = "0.6", features = ["theme"] }
+tui-spinner = { version = "0.5", features = ["theme"] }
 color-eyre = "0.6"
 
 # GUI (netrunner-gui)

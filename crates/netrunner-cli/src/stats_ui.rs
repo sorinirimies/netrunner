@@ -21,6 +21,9 @@ use ratatui::{
 };
 use std::io;
 use std::time::Duration;
+use tui_chart::{
+    Axis, Gauge, LegendPosition as ChartLegend, LineChart, LineMode, Series, Sparkline,
+};
 use tui_piechart::{symbols, LegendAlignment, LegendLayout, LegendPosition, PieChart, PieSlice};
 
 use netrunner_core::{HistoryStorage, SpeedTestResult, TestStatistics};
@@ -102,8 +105,27 @@ impl Focus {
     }
 }
 
+/// Which visualisation fills the left column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum View {
+    /// Speed over time (`tui-chart` line chart + sparklines).
+    Trend,
+    /// Speed-tier distribution (`tui-piechart`).
+    Distribution,
+}
+
+impl View {
+    fn toggle(self) -> Self {
+        match self {
+            View::Trend => View::Distribution,
+            View::Distribution => View::Trend,
+        }
+    }
+}
+
 /// Application state for the statistics TUI
 struct StatsApp {
+    view: View,
     stats: TestStatistics,
     recent_results: Vec<SpeedTestResult>,
     focus: Focus,
@@ -114,6 +136,7 @@ struct StatsApp {
 impl StatsApp {
     fn new(stats: TestStatistics, recent_results: Vec<SpeedTestResult>) -> Self {
         Self {
+            view: View::Trend,
             stats,
             recent_results,
             focus: Focus::Download,
@@ -182,7 +205,7 @@ pub fn show_statistics_tui() -> io::Result<()> {
 fn load_data() -> Result<(TestStatistics, Vec<SpeedTestResult>), Box<dyn std::error::Error>> {
     let storage = HistoryStorage::new()?;
     let stats = storage.get_statistics()?;
-    let recent = storage.get_recent_results(20)?;
+    let recent = storage.get_recent_results(60)?;
     Ok((stats, recent))
 }
 
@@ -206,6 +229,7 @@ fn run_stats_loop(
                     KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
                         app.focus = app.focus.prev();
                     }
+                    KeyCode::Char('v') => app.view = app.view.toggle(),
                     KeyCode::Char('t') => app.theme = app.theme.next(),
                     KeyCode::Char('T') => app.theme = app.theme.prev(),
                     KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
@@ -282,6 +306,8 @@ fn render_footer(frame: &mut ratatui::Frame, area: Rect) {
         Span::raw("  Scroll results   "),
         Span::styled("t/T", Style::default().fg(pal().yellow).bold()),
         Span::raw("  Theme   "),
+        Span::styled("v", Style::default().fg(pal().yellow).bold()),
+        Span::raw("  Trend/Distribution   "),
         Span::styled("q / Esc", Style::default().fg(pal().yellow).bold()),
         Span::raw("  Quit"),
     ]);
@@ -305,6 +331,10 @@ fn render_body(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
 // ── Chart grid ────────────────────────────────────────────────────────────────
 
 fn render_chart_grid(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
+    if app.view == View::Trend {
+        render_trend(frame, area, app);
+        return;
+    }
     let rows =
         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).split(area);
 
@@ -318,6 +348,98 @@ fn render_chart_grid(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
     render_upload_chart(frame, top[1], app);
     render_ping_chart(frame, bottom[0], app);
     render_quality_chart(frame, bottom[1], app);
+}
+
+// ── Trend view (tui-chart) ────────────────────────────────────────────────────
+
+/// Results oldest → newest (storage returns newest first).
+fn chronological(app: &StatsApp) -> Vec<&SpeedTestResult> {
+    app.recent_results.iter().rev().collect()
+}
+
+fn render_trend(frame: &mut ratatui::Frame, area: Rect, app: &StatsApp) {
+    let rows =
+        Layout::vertical([Constraint::Percentage(58), Constraint::Percentage(42)]).split(area);
+    let data = chronological(app);
+
+    let series = |name: &str, color: Color, f: &dyn Fn(&SpeedTestResult) -> f64| {
+        Series::new(name)
+            .color(color)
+            .data(data.iter().enumerate().map(|(i, r)| (i as f64, f(r))))
+    };
+    let chart = LineChart::new(vec![
+        series("Download", pal().green, &|r| r.download_mbps),
+        series("Upload", pal().magenta, &|r| r.upload_mbps),
+        series("Ping", pal().yellow, &|r| r.ping_ms).secondary_axis(true),
+    ])
+    .mode(LineMode::Area)
+    .legend(ChartLegend::TopLeft)
+    .x_axis(Axis::new().title("test #"))
+    .y_axis(Axis::new().title("Mbps"))
+    .y2_axis(Axis::new().title("ms"))
+    .theme(app.theme.clone())
+    .block(chart_block("📈 Speed History", true));
+    frame.render_widget(&chart, rows[0]);
+
+    let cols = Layout::horizontal([Constraint::Ratio(1, 3); 3]).split(rows[1]);
+    let focus = app.focus;
+    let spark = |frame: &mut ratatui::Frame,
+                 area: Rect,
+                 title: &str,
+                 unit: &str,
+                 color: Color,
+                 focused: bool,
+                 f: &dyn Fn(&SpeedTestResult) -> f64| {
+        let vals: Vec<f64> = data.iter().map(|r| f(r)).collect();
+        let last = vals.last().copied().unwrap_or(0.0);
+        let max = vals.iter().copied().fold(0.0_f64, f64::max);
+        let heading = format!("{title} {last:.1} {unit}");
+        let inner = chart_block(&heading, focused);
+        let inner_area = inner.inner(area);
+        frame.render_widget(inner, area);
+        let parts = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(inner_area);
+        frame.render_widget(
+            Sparkline::new(vals)
+                .smooth(2)
+                .color(color)
+                .theme(app.theme.clone()),
+            parts[0],
+        );
+        frame.render_widget(
+            Gauge::new(last)
+                .range(0.0, max.max(1.0))
+                .label(format!("peak {max:.1}"))
+                .theme(app.theme.clone()),
+            parts[1],
+        );
+    };
+    spark(
+        frame,
+        cols[0],
+        "⬇ Down",
+        "Mbps",
+        pal().green,
+        focus == Focus::Download,
+        &|r| r.download_mbps,
+    );
+    spark(
+        frame,
+        cols[1],
+        "⬆ Up",
+        "Mbps",
+        pal().magenta,
+        focus == Focus::Upload,
+        &|r| r.upload_mbps,
+    );
+    spark(
+        frame,
+        cols[2],
+        "⚡ Ping",
+        "ms",
+        pal().yellow,
+        focus == Focus::Ping,
+        &|r| r.ping_ms,
+    );
 }
 
 /// Build a styled block for a chart cell, highlighted when focused.
@@ -773,3 +895,47 @@ fn build_speed_slices(ultra: u32, fast: u32, moderate: u32, slow: u32) -> Vec<Pi
 // Pick a colour that reflects connection quality. Generated from the canonical
 // palette in `netrunner_core` so the TUI and GUI stay in sync.
 netrunner_core::quality_color_fn!(fn quality_color -> Color { Color::Rgb });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    fn app(n: usize) -> StatsApp {
+        let results: Vec<SpeedTestResult> = (0..n)
+            .map(|i| SpeedTestResult {
+                download_mbps: 40.0 + i as f64 * 3.0,
+                upload_mbps: 10.0 + i as f64,
+                ping_ms: 12.0 + (i % 5) as f64,
+                ..Default::default()
+            })
+            .collect();
+        let stats = TestStatistics {
+            test_count: n,
+            ..Default::default()
+        };
+        StatsApp::new(stats, results)
+    }
+
+    #[test]
+    fn both_views_render_at_many_sizes() {
+        for view in [View::Trend, View::Distribution] {
+            for n in [0, 1, 25] {
+                for (w, h) in [(140, 45), (100, 30), (60, 20), (20, 8)] {
+                    let mut a = app(n);
+                    a.view = view;
+                    let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
+                    t.draw(|f| render_stats(f, &a)).unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn trend_view_shows_history_chart() {
+        let a = app(12);
+        let mut t = Terminal::new(TestBackend::new(140, 45)).unwrap();
+        t.draw(|f| render_stats(f, &a)).unwrap();
+        assert!(t.backend().to_string().contains("Speed History"));
+    }
+}

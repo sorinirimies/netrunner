@@ -50,6 +50,8 @@ color-eyre = { workspace = true }
 prettytable-rs = { workspace = true }
 ratatui-widgets = { workspace = true }
 tui-piechart = { workspace = true }
+tui-chart = { workspace = true }
+tui-spinner = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

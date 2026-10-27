@@ -6,6 +6,7 @@
 //! presentation layer:
 //!
 //! - [`ui`] — spinners, banners and the live bandwidth graph
+//! - [`live`] — the full-screen live test dashboard (`tui-chart`, `tui-spinner`)
 //! - [`intro`] — the animated glowing-logo splash screen
 //! - [`logo`] — the `NETRUNNER` logo widget
 //! - [`stats_ui`] — the full-screen statistics dashboard with pie charts
@@ -17,6 +18,7 @@
 //! graphs).
 
 pub mod intro;
+pub mod live;
 pub mod logo;
 pub mod render;
 pub mod stats_ui;

@@ -22,6 +22,10 @@ use crate::ui::{BandwidthMonitor, UI};
 pub async fn run_speed_test_tui(
     config: TestConfig,
 ) -> Result<SpeedTestResult, Box<dyn std::error::Error>> {
+    // Interactive terminal → full-screen live dashboard; otherwise classic line output.
+    if config.animation_enabled && std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        return crate::live::run_speed_test_live(config).await;
+    }
     let ui = UI::new(config.clone());
     let (tx, mut rx) = mpsc::unbounded_channel::<TestEvent>();
 

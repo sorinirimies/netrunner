@@ -57,6 +57,23 @@ netrunner_cli --json          # machine-readable output (no TUI)
 Live download/upload bandwidth graphs render while the test runs, followed by a
 results panel and — with `--history` — a full-screen dashboard of pie charts.
 
+### Live dashboard & history charts
+
+In an interactive terminal the speed test runs in a full-screen live dashboard built from the
+author's ratatui widgets: [`tui-spinner`](https://crates.io/crates/tui-spinner) (activity bar and
+phase tracker), [`tui-chart`](https://crates.io/crates/tui-chart) (live throughput line chart,
+gauges, latency sparkline) and [`tui-nuances`](https://crates.io/crates/tui-nuances) themes
+(`NETRUNNER_THEME=<name>`, `t`/`T` to cycle). `--no-animation` or a non-TTY keeps the classic
+line output.
+
+`netrunner_cli --stats` shows your history as a speed-over-time `tui-chart` line chart with
+sparklines and gauges; press `v` to switch to the `tui-piechart` speed-tier distribution.
+
+## Web dashboard — `netrunner-web`
+
+`cargo run -p netrunner-web` serves a [Topcoat](https://crates.io/crates/topcoat) dashboard with a
+live chart streamed over server-sent events. See [crates/netrunner-web](crates/netrunner-web/README.md).
+
 ## Desktop app — `netrunner`
 
 A [Zed **GPUI**](https://www.gpui.rs/) desktop app that runs the same engine and
