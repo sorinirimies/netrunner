@@ -29,7 +29,7 @@ jobs:
       - name: Fuzz each target for 60s
         run: |
           for t in $(cargo +nightly fuzz list); do
-            cargo +nightly fuzz run "$t" -- -max_total_time=60
+            cargo +nightly fuzz run --target x86_64-unknown-linux-gnu "$t" -- -max_total_time=60
           done
       - name: Upload crashes
         if: failure()
