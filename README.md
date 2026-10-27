@@ -66,7 +66,7 @@ gauges, latency sparkline) and [`tui-nuances`](https://crates.io/crates/tui-nuan
 (`NETRUNNER_THEME=<name>`, `t`/`T` to cycle). `--no-animation` or a non-TTY keeps the classic
 line output.
 
-`netrunner_cli --stats` shows your history as a speed-over-time `tui-chart` line chart with
+`netrunner_cli --history` shows your history as a speed-over-time `tui-chart` line chart with
 sparklines and gauges; press `v` to switch to the `tui-piechart` speed-tier distribution.
 
 ## Web dashboard — `netrunner-web`
