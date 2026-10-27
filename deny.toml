@@ -13,14 +13,11 @@ ignore = [
     "RUSTSEC-2025-0134",
     "RUSTSEC-2026-0173",
     "RUSTSEC-2026-0192",
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
     "RUSTSEC-2026-0206",
-    "RUSTSEC-2026-0258",
-    "RUSTSEC-2026-0285",
-    "RUSTSEC-2026-0346",
-    "RUSTSEC-2026-0348",
-    "RUSTSEC-2026-0349",
+    # zbus stack flagged unmaintained; transitive via gpui (oo7/ashpd), no fix available
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
 ]
 
 [licenses]

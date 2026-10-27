@@ -3,6 +3,7 @@ members = [
     "crates/netrunner-core",
     "crates/netrunner-cli",
     "crates/netrunner-gui",
+    "crates/netrunner-web",
 ]
 resolver = "2"
 
@@ -55,6 +56,9 @@ color-eyre = "0.6"
 
 # GUI (netrunner-gui)
 gpui = "0.2"
+
+# Web (netrunner-web)
+topcoat = { version = "0.10", features = ["sse"] }
 
 # Internal crates
 netrunner-core = { path = "crates/netrunner-core", version = "2.0.4" }

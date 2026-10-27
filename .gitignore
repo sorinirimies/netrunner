@@ -45,3 +45,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/

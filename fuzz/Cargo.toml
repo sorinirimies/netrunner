@@ -1,0 +1,48 @@
+[package]
+name = "netrunner-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+postcard = { version = "1.1", features = ["use-std"] }
+netrunner-core = { path = "../crates/netrunner-core" }
+netrunner-web = { path = "../crates/netrunner-web" }
+
+# Not part of the main workspace (needs nightly).
+[workspace]
+
+[[bin]]
+name = "settings_json"
+path = "fuzz_targets/settings_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "history_json"
+path = "fuzz_targets/history_json.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "history_postcard"
+path = "fuzz_targets/history_postcard.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "quality"
+path = "fuzz_targets/quality.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "web_escape"
+path = "fuzz_targets/web_escape.rs"
+test = false
+doc = false

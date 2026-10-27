@@ -54,10 +54,15 @@ build-gui:
 build-tui:
     cargo build -p netrunner_cli
 
-# Build release binaries for GUI and TUI
+# Build only the web dashboard (Topcoat, dev)
+build-web:
+    cargo build -p netrunner-web
+
+# Build release binaries for GUI, TUI and web
 build-release:
     cargo build --release -p netrunner
     cargo build --release -p netrunner_cli
+    cargo build --release -p netrunner-web
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 
@@ -68,6 +73,10 @@ run-gui:
 # Launch the Ratatui terminal UI
 run-tui:
     cargo run -p netrunner_cli
+
+# Serve the web dashboard (PORT=3000, HOST=127.0.0.1 by default)
+run-web:
+    cargo run -p netrunner-web
 
 # Alias: default run launches the GUI
 run: run-gui
@@ -89,6 +98,10 @@ test-gui:
 # Test only the TUI crate
 test-tui:
     cargo test -p netrunner_cli --all-features
+
+# Test only the web dashboard crate
+test-web:
+    cargo test -p netrunner-web --all-features
 
 # Run only the headless (CI-friendly) crates: core + TUI, no GPUI
 test-headless:
@@ -127,7 +140,7 @@ clippy-headless:
 # Run all quality checks (format, clippy, test, nu) — must pass before a release.
 
 # Auto-formats first, then verifies no changes remain (catches unstaged format diffs).
-check-all: fmt clippy test test-nu
+check-all: fmt clippy test test-nu deny
     @echo "🔍 Verifying formatting is clean…"
     cargo fmt --all -- --check
     @echo "✅ All checks passed!"
@@ -215,6 +228,10 @@ doc-gui:
 doc-tui:
     cargo doc --no-deps -p netrunner_cli --open
 
+# Generate and open docs for the web crate
+doc-web:
+    cargo doc --no-deps -p netrunner-web --open
+
 # Generate docs for the full workspace (no browser)
 doc:
     cargo doc --no-deps --workspace
@@ -272,9 +289,9 @@ publish-dry: check-all
     @echo "Dry-run: netrunner-core"
     cargo publish --dry-run -p netrunner-core
 
-# Publish all three in dependency order: core → CLI → GUI.
-publish: check-all publish-core publish-cli publish-gui
-    @echo "✅ netrunner-core, netrunner_cli, and netrunner published to crates.io!"
+# Publish all four in dependency order: core → CLI → GUI.
+publish: check-all publish-core publish-cli publish-gui publish-web
+    @echo "✅ netrunner-core, netrunner_cli, netrunner and netrunner-web published to crates.io!"
 
 # Publish netrunner-core (required by the CLI and GUI)
 publish-core:
@@ -292,6 +309,11 @@ publish-cli:
 publish-gui:
     @echo "📦 Publishing netrunner (GUI)…"
     cargo publish -p netrunner
+
+# Publish netrunner-web (the Topcoat web dashboard)
+publish-web:
+    @echo "📦 Publishing netrunner-web…"
+    cargo publish -p netrunner-web
 
 # Show what would be released without making any changes
 release-preview: _check-git-cliff
@@ -320,6 +342,7 @@ update-deps:
     @echo "⬆️  Updating dependencies…"
     cargo update
     @echo "🔍 Running quality gate…"
+    cargo deny check
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --all-features -- -D warnings -A deprecated
     cargo test --workspace --locked --all-features --all-targets
@@ -462,3 +485,37 @@ deny:
 # Audit dependencies for known vulnerabilities
 audit:
     cargo audit
+
+# Run every supply-chain check
+security: deny audit
+
+# ── Fuzzing (needs nightly + `cargo install cargo-fuzz`) ──────────────────────
+
+# List fuzz targets
+fuzz-list:
+    cd fuzz && cargo +nightly fuzz list
+
+# Build all fuzz targets
+fuzz-build:
+    cd fuzz && cargo +nightly fuzz build
+
+# Fuzz one target (e.g. just fuzz history_json 60)
+fuzz target seconds="30":
+    cd fuzz && cargo +nightly fuzz run {{ target }} -- -max_total_time={{ seconds }}
+
+# Smoke-fuzz every target (same as the CI job)
+fuzz-all seconds="15":
+    #!/usr/bin/env sh
+    set -e
+    cd fuzz
+    for t in $(cargo +nightly fuzz list); do
+        echo "▶ $t"
+        cargo +nightly fuzz run "$t" -- -max_total_time={{ seconds }}
+    done
+
+# ── Coverage (needs `cargo install cargo-llvm-cov`) ───────────────────────────
+
+# HTML coverage report for the headless crates
+coverage:
+    cargo llvm-cov --workspace --exclude netrunner --html
+    @echo "→ target/llvm-cov/html/index.html"

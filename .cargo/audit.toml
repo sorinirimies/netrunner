@@ -1,4 +1,4 @@
-# cargo-audit configuration. Vulnerabilities always fail; unsound/unmaintained
-# are reported as warnings.
+# cargo-audit configuration. Vulnerabilities always fail; unmaintained
+# advisories are warnings (all transitive via gpui / reqwest; see deny.toml).
 [advisories]
-ignore = []   # add "RUSTSEC-YYYY-NNNN" with a justification comment
+ignore = []
