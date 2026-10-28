@@ -341,7 +341,7 @@ fn display_diagnostics(d: &NetworkDiagnostics) {
 }
 
 /// Render the final speed-test results table.
-fn display_results(result: &SpeedTestResult) {
+pub(crate) fn display_results(result: &SpeedTestResult) {
     println!();
     println!("{}", "═".repeat(60).bright_blue());
     println!(

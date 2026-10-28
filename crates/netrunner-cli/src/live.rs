@@ -53,6 +53,7 @@ pub struct LiveState {
     ping: Vec<f64>,
     jitter_ms: Option<f64>,
     done: bool,
+    finished: bool,
 }
 
 impl LiveState {
@@ -71,6 +72,7 @@ impl LiveState {
             ping: Vec::new(),
             jitter_ms: None,
             done: false,
+            finished: false,
         }
     }
 
@@ -162,8 +164,15 @@ pub fn draw(frame: &mut Frame, s: &LiveState) {
     draw_meters(frame, meters, s);
 
     let hint = Line::from(vec![
-        Span::styled("q/Esc", Style::default().fg(t.warning).bold()),
-        Span::raw(" cancel   "),
+        Span::styled(
+            if s.finished { "any key" } else { "q/Esc" },
+            Style::default().fg(t.warning).bold(),
+        ),
+        Span::raw(if s.finished {
+            " continue   "
+        } else {
+            " cancel   "
+        }),
         Span::styled("t/T", Style::default().fg(t.warning).bold()),
         Span::raw(format!(" theme ({})", t.name)),
     ]);
@@ -382,13 +391,29 @@ pub async fn run_speed_test_live(
             }
             state.done = true;
             terminal.draw(|f| draw(f, &state))?;
-            tokio::time::sleep(Duration::from_millis(900)).await;
+            state.finished = true;
+            terminal.draw(|f| draw(f, &state))?;
+            // Keep the finished chart on screen until a key is pressed.
+            loop {
+                if event::poll(Duration::from_millis(100))? {
+                    if let Event::Key(k) = event::read()? {
+                        if k.kind == KeyEventKind::Press {
+                            break;
+                        }
+                    }
+                }
+                state.tick += 1;
+                terminal.draw(|f| draw(f, &state))?;
+            }
             break;
         }
     }
     drop(terminal);
     io::Write::flush(&mut io::stdout())?;
-    result.ok_or_else(|| "speed test did not complete".into())
+    let result: SpeedTestResult = result.ok_or("speed test did not complete")?;
+    drop(_guard);
+    crate::render::display_results(&result);
+    Ok(result)
 }
 
 #[cfg(test)]
