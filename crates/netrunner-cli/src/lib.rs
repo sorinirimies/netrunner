@@ -23,6 +23,7 @@ pub mod logo;
 pub mod render;
 pub mod stats_ui;
 pub mod ui;
+pub mod workbench;
 
 // Re-export the logo (part of this crate's public API) and the core surface
 // so existing consumers keep working after the workspace split.

@@ -31,7 +31,10 @@ use crate::types::{
     ConnectionQuality, ServerCapabilities, ServerProvider, SpeedTestResult, TestConfig, TestServer,
 };
 
-const PARALLEL_CONNECTIONS: usize = 50;
+/// Enough to saturate gigabit links, few enough not to trip the CDN's
+/// per-IP rate limiter (50 connections re-requesting 25 MB blocks got a
+/// 429 with an hour-long Retry-After).
+const PARALLEL_CONNECTIONS: usize = 16;
 const SERVER_SELECTION_COUNT: usize = 3;
 const LATENCY_SAMPLES: usize = 10;
 const UPLOAD_CHUNK_BYTES: usize = 64 * 1024;
@@ -48,7 +51,7 @@ const WARMUP_SECS: f64 = 3.0;
 /// makes the numbers comparable to speedtest.net. (The previous code appended
 /// `/__down` to every server, but only Cloudflare serves it, so half the
 /// connections transferred nothing and the result was badly under-reported.)
-const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=25000000";
+const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=50000000";
 const UPLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__up";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1122,12 +1125,14 @@ impl SpeedTest {
         // Lock-free shared byte counter: at gigabit speeds a Mutex locked on
         // every chunk becomes the bottleneck and under-reports throughput.
         let total_bytes = Arc::new(AtomicU64::new(0));
+        let blocked = Arc::new(AtomicU64::new(0));
         let start = Instant::now();
         let test_duration = Duration::from_secs(TEST_SECS);
         let loaded_probe = self.spawn_loaded_probe(probe_url, start + test_duration);
 
         let mut handles = Vec::new();
         for _ in 0..PARALLEL_CONNECTIONS {
+            let blocked = Arc::clone(&blocked);
             let url = DOWNLOAD_ENDPOINT.to_string();
             let client = self.client.clone();
             let total_bytes = Arc::clone(&total_bytes);
@@ -1139,7 +1144,8 @@ impl SpeedTest {
                     match client.get(&url).send().await {
                         Ok(response) if !response.status().is_success() => {
                             // e.g. 403/429: don't spin; back off and retry.
-                            tokio::time::sleep(Duration::from_millis(250)).await;
+                            blocked.fetch_max(retry_after_secs(&response), Ordering::Relaxed);
+                            tokio::time::sleep(Duration::from_millis(500)).await;
                         }
                         Ok(response) => {
                             let mut stream = response.bytes_stream();
@@ -1176,6 +1182,16 @@ impl SpeedTest {
         let samples = monitor_handle.await.unwrap_or_default();
 
         let mbps = sustained_mbps(&samples, WARMUP_SECS).clamp(0.0, 10_000.0);
+        let retry = blocked.load(Ordering::Relaxed);
+        if mbps == 0.0 && retry > 0 {
+            emit(
+                &self.events,
+                TestEvent::Warning(format!(
+                    "Download endpoint is rate limiting this IP (retry in ~{} min)",
+                    retry.div_ceil(60).max(1)
+                )),
+            );
+        }
         emit(&self.events, TestEvent::DownloadComplete { mbps });
         Ok((mbps, loaded_probe.await.unwrap_or_default()))
     }
@@ -1390,6 +1406,17 @@ fn build_geo(
         longitude,
         isp,
     })
+}
+
+/// `Retry-After` seconds of a rejected response (1 when absent), so callers can
+/// tell "blocked" from "slow".
+fn retry_after_secs(resp: &reqwest::Response) -> u64 {
+    resp.headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(1)
+        .max(1)
 }
 
 /// One HEAD round trip in milliseconds (sub-ms precision); `None` on failure.

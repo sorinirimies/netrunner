@@ -124,17 +124,17 @@ impl View {
 }
 
 /// Application state for the statistics TUI
-struct StatsApp {
+pub(crate) struct StatsApp {
     view: View,
     stats: TestStatistics,
     recent_results: Vec<SpeedTestResult>,
     focus: Focus,
     scroll: usize,
-    theme: tui_nuances::Theme,
+    pub(crate) theme: tui_nuances::Theme,
 }
 
 impl StatsApp {
-    fn new(stats: TestStatistics, recent_results: Vec<SpeedTestResult>) -> Self {
+    pub(crate) fn new(stats: TestStatistics, recent_results: Vec<SpeedTestResult>) -> Self {
         Self {
             view: View::Trend,
             stats,
@@ -143,6 +143,43 @@ impl StatsApp {
             scroll: 0,
             theme: initial_theme(),
         }
+    }
+
+    /// Load the latest stats/results from disk (empty on any error).
+    pub(crate) fn from_storage() -> Self {
+        let (stats, recent) = load_data().unwrap_or_default();
+        Self::new(stats, recent)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.stats.test_count == 0
+    }
+
+    /// Handle a navigation key; returns `true` when consumed.
+    pub(crate) fn handle_key(&mut self, code: KeyCode) -> bool {
+        match code {
+            KeyCode::Right | KeyCode::Char('l') => self.focus = self.focus.next(),
+            KeyCode::Left | KeyCode::Char('h') => self.focus = self.focus.prev(),
+            KeyCode::Char('v') => self.view = self.view.toggle(),
+            KeyCode::Down | KeyCode::Char('j') => self.scroll_down(),
+            KeyCode::Up | KeyCode::Char('k') => self.scroll_up(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Render the statistics body (cards, charts, table) into `area`.
+    pub(crate) fn render_in(&self, frame: &mut ratatui::Frame, area: Rect) {
+        PAL.with(|p| p.set(Pal::of(&self.theme)));
+        frame.render_widget(
+            Block::default().style(Style::default().bg(pal().panel_bg)),
+            area,
+        );
+        render_body(frame, area, self);
+    }
+
+    pub(crate) fn latest(&self) -> Option<&SpeedTestResult> {
+        self.recent_results.first()
     }
 
     /// Maximum rows visible in the results table

@@ -74,6 +74,19 @@ sparklines and gauges; press `v` to switch to the `tui-piechart` speed-tier dist
 `cargo run -p netrunner-web` serves a [Topcoat](https://crates.io/crates/topcoat) dashboard with a
 live chart streamed over server-sent events. See [crates/netrunner-web](crates/netrunner-web/README.md).
 
+### Workbench (`netrunner_cli --tui`)
+
+A persistent tabbed app that stays open between tests:
+
+| Tab | Contents | Built with |
+|-----|----------|-----------|
+| ⚡ Test | live throughput chart, gauges, latency under load (bufferbloat grade), latest result | `tui-chart`, `tui-spinner`, `tui-rating` |
+| 📈 History | speed-over-time chart, sparklines, tier distribution (`v`), export (`e`) / import (`i`) | `tui-chart`, `tui-piechart` |
+| 📁 Files | pick a history `.json` to import | `tui-file-explorer` |
+| ⚙ Settings | animations, auto-run, timeout, history size (auto-saved) | `tui-checkbox`, `tui-slider` |
+
+`Tab`/`1-4`/`F1-F4` switch tabs, `t`/`T` cycle `tui-nuances` themes, `?` shows help.
+
 ## Desktop app — `netrunner`
 
 A [Zed **GPUI**](https://www.gpui.rs/) desktop app that runs the same engine and

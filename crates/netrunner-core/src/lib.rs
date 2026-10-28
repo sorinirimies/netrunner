@@ -44,6 +44,6 @@ pub use presentation::{palette, quality_rgb};
 pub use settings::Settings;
 pub use speed_test::{GeoLocation, SpeedTest};
 pub use types::{
-    ConnectionQuality, DetailLevel, NetworkDiagnostics, RouteHop, ServerCapabilities,
-    ServerProvider, SpeedTestResult, TestConfig, TestServer,
+    bufferbloat_grade, ConnectionQuality, DetailLevel, NetworkDiagnostics, RouteHop,
+    ServerCapabilities, ServerProvider, SpeedTestResult, TestConfig, TestServer,
 };

@@ -70,9 +70,9 @@ build-release:
 run-gui:
     cargo run -p netrunner
 
-# Launch the Ratatui terminal UI
+# Launch the persistent Ratatui workbench (tabs: test, history, files, settings)
 run-tui:
-    cargo run -p netrunner_cli
+    cargo run -p netrunner_cli -- --tui
 
 # Serve the web dashboard (PORT=3000, HOST=127.0.0.1 by default)
 run-web:

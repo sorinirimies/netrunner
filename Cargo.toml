@@ -54,6 +54,10 @@ ratatui-widgets = "0.3"
 tui-piechart = { version = "1.4", features = ["theme"] }
 tui-chart = { version = "0.6", features = ["theme"] }
 tui-spinner = { version = "0.5", features = ["theme"] }
+tui-rating = { version = "0.4", features = ["theme"] }
+tui-slider = { version = "0.4", features = ["theme"] }
+tui-checkbox = { version = "0.5", features = ["theme"] }
+tui-file-explorer = { version = "4", default-features = false }
 color-eyre = "0.6"
 
 # GUI (netrunner-gui)

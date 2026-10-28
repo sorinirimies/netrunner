@@ -32,16 +32,16 @@ const TRACKED: [(Phase, &str); 6] = [
     (Phase::Locating, "Locate"),
     (Phase::SelectingServers, "Servers"),
     (Phase::Latency, "Latency"),
+    (Phase::Jitter, "Jitter"),
     (Phase::Download, "Download"),
     (Phase::Upload, "Upload"),
-    (Phase::Jitter, "Jitter"),
 ];
 
 /// Everything the dashboard shows; updated purely from [`TestEvent`]s.
 #[derive(Debug)]
 pub struct LiveState {
-    tick: u64,
-    theme: Theme,
+    pub(crate) tick: u64,
+    pub(crate) theme: Theme,
     phase: Option<Phase>,
     status: String,
     location: Option<String>,
@@ -52,8 +52,10 @@ pub struct LiveState {
     upload_peak: f64,
     ping: Vec<f64>,
     jitter_ms: Option<f64>,
-    done: bool,
-    finished: bool,
+    loaded: Vec<f64>,
+    pub(crate) warning: Option<String>,
+    pub(crate) done: bool,
+    pub(crate) finished: bool,
     summary: Option<String>,
 }
 
@@ -72,6 +74,8 @@ impl LiveState {
             upload_peak: 0.0,
             ping: Vec::new(),
             jitter_ms: None,
+            loaded: Vec::new(),
+            warning: None,
             done: false,
             finished: false,
             summary: None,
@@ -111,13 +115,16 @@ impl LiveState {
             TestEvent::LatencyProgress { avg_ms } | TestEvent::LatencyComplete { avg_ms } => {
                 self.ping.push(avg_ms);
             }
+            TestEvent::LoadedLatency { ms } => self.loaded.push(ms),
+            TestEvent::Warning(msg) => self.warning = Some(msg),
             TestEvent::JitterComplete { jitter_ms, .. } => self.jitter_ms = Some(jitter_ms),
             TestEvent::Completed(r) => {
                 self.done = true;
                 self.summary = Some(format!(
-                    "{:?} connection · loss {:.1}% · {:.0}s{}",
+                    "{:?} connection · loss {:.1}% · bufferbloat {} · {:.0}s{}",
                     r.quality,
                     r.packet_loss_percent,
+                    r.bufferbloat_grade().unwrap_or("n/a"),
                     r.test_duration_seconds,
                     r.isp
                         .as_deref()
@@ -157,12 +164,39 @@ pub fn draw(frame: &mut Frame, s: &LiveState) {
         Block::default().style(Style::default().bg(t.background.unwrap_or(Color::Reset))),
         area,
     );
-    let [header, bar, chart, meters, footer] = Layout::vertical([
+    let [body, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+    draw_dashboard(frame, body, s);
+
+    let hint = hint_line(s);
+    frame.render_widget(Paragraph::new(hint).alignment(Alignment::Center), footer);
+}
+
+fn hint_line(s: &LiveState) -> Line<'static> {
+    let t = &s.theme;
+    Line::from(vec![
+        Span::styled(
+            if s.finished { "any key" } else { "q/Esc" },
+            Style::default().fg(t.warning).bold(),
+        ),
+        Span::raw(if s.finished {
+            " continue   "
+        } else {
+            " cancel   "
+        }),
+        Span::styled("t/T", Style::default().fg(t.warning).bold()),
+        Span::raw(format!(" theme ({})", t.name)),
+    ])
+}
+
+/// The dashboard proper (header, activity bar, chart, meters) in `area`.
+/// Shared by the one-shot live screen and the interactive workbench.
+pub fn draw_dashboard(frame: &mut Frame, area: Rect, s: &LiveState) {
+    let t = &s.theme;
+    let [header, bar, chart, meters] = Layout::vertical([
         Constraint::Length(4),
         Constraint::Length(1),
         Constraint::Min(6),
         Constraint::Length(5),
-        Constraint::Length(1),
     ])
     .areas(area);
 
@@ -175,21 +209,6 @@ pub fn draw(frame: &mut Frame, s: &LiveState) {
     );
     draw_chart(frame, chart, s);
     draw_meters(frame, meters, s);
-
-    let hint = Line::from(vec![
-        Span::styled(
-            if s.finished { "any key" } else { "q/Esc" },
-            Style::default().fg(t.warning).bold(),
-        ),
-        Span::raw(if s.finished {
-            " continue   "
-        } else {
-            " cancel   "
-        }),
-        Span::styled("t/T", Style::default().fg(t.warning).bold()),
-        Span::raw(format!(" theme ({})", t.name)),
-    ]);
-    frame.render_widget(Paragraph::new(hint).alignment(Alignment::Center), footer);
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, s: &LiveState) {
@@ -230,6 +249,9 @@ fn draw_header(frame: &mut Frame, area: Rect, s: &LiveState) {
     spans.pop();
     let mut lines = vec![Line::from(spans)];
     let mut info = s.summary.clone().unwrap_or_else(|| s.status.clone());
+    if let Some(w) = &s.warning {
+        info = format!("⚠ {w}  ·  {info}");
+    }
     if let Some(loc) = &s.location {
         info = format!("{info}  ·  📍 {loc}");
     }
@@ -299,9 +321,19 @@ fn draw_meters(frame: &mut Frame, area: Rect, s: &LiveState) {
     frame.render_widget(block, ping);
     let rows = Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).split(inner);
     let last = s.ping.last().copied().unwrap_or(0.0);
-    let jitter = s
+    let mut jitter = s
         .jitter_ms
         .map_or(String::new(), |j| format!("   jitter {j:.1} ms"));
+    if !s.loaded.is_empty() {
+        let mut l = s.loaded.clone();
+        l.sort_by(|a, b| a.total_cmp(b));
+        let med = l[l.len() / 2];
+        let idle = s.ping.first().copied().unwrap_or(0.0);
+        jitter.push_str(&format!(
+            "   loaded {med:.0} ms ({})",
+            netrunner_core::bufferbloat_grade((med - idle).max(0.0))
+        ));
+    }
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
@@ -313,7 +345,7 @@ fn draw_meters(frame: &mut Frame, area: Rect, s: &LiveState) {
         rows[0],
     );
     frame.render_widget(
-        Sparkline::new(s.ping.iter().copied())
+        Sparkline::new(s.ping.iter().chain(s.loaded.iter()).copied())
             .color(t.warning)
             .theme(t.clone()),
         rows[1],

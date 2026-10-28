@@ -4387,8 +4387,12 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tui-chart",
+ "tui-checkbox",
+ "tui-file-explorer",
  "tui-nuances",
  "tui-piechart",
+ "tui-rating",
+ "tui-slider",
  "tui-spinner",
 ]
 
@@ -8047,6 +8051,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "tui-checkbox"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "814f8ff6c52d794ae22e41b134fee301cdda85e84c0f0c235fcec2efa49ba17a"
+dependencies = [
+ "ratatui",
+ "tui-nuances",
+]
+
+[[package]]
+name = "tui-file-explorer"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32c0c5529ee2d8fa59fb5f9411f4f9add5c9f5606130fcc01cb9b7957aee2b67"
+dependencies = [
+ "crossterm",
+ "libc",
+ "ratatui",
+ "tui-nuances",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "tui-nuances"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8063,6 +8090,27 @@ checksum = "ca199fb77a982abf283c184704e117bf5ebf3ce8fdcdc1880bb4178037290158"
 dependencies = [
  "ratatui",
  "tui-nuances",
+]
+
+[[package]]
+name = "tui-rating"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71de79ba6a4aee775c1c427da46395d4e8f838504851e03d278d92bf63e92f60"
+dependencies = [
+ "ratatui",
+ "tui-nuances",
+]
+
+[[package]]
+name = "tui-slider"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c71205db94d492405f81f3a55dc9728e8258822528b02647c2a00e8e275b0b27"
+dependencies = [
+ "ratatui",
+ "tui-nuances",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

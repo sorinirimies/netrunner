@@ -90,13 +90,20 @@ async fn run_app() -> Result<(), Box<dyn std::error::Error>> {
                 .short('m')
                 .long("mode")
                 .value_name("MODE")
-                .help("Test mode (speed, diag, history, full, servers)")
+                .help("Test mode (speed, diag, history, full, servers, tui)")
                 .default_value("speed"),
         )
         .arg(
             Arg::new("debug-servers")
                 .long("debug-servers")
                 .help("Show detailed server testing information")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("tui")
+                .short('i')
+                .long("tui")
+                .help("Open the interactive workbench (tabs: test, history, files, settings)")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -131,6 +138,16 @@ async fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         detail_level,
         max_servers: 3,
     };
+
+    // Persistent interactive workbench.
+    if !json_output
+        && (matches.get_flag("tui")
+            || matches.get_one::<String>("mode").map(String::as_str) == Some("tui"))
+    {
+        return netrunner_cli::workbench::run_workbench()
+            .await
+            .map_err(Into::into);
+    }
 
     // If JSON output is requested, skip the interactive menu and intro
     if json_output {

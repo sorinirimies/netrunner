@@ -306,6 +306,7 @@ impl SpeedApp {
                 self.ping_ms = avg_ms as f32;
             }
             TestEvent::LoadedLatency { .. } => {}
+            TestEvent::Warning(msg) => self.status = msg.into(),
             TestEvent::Completed(result) => {
                 self.download_mbps = result.download_mbps as f32;
                 self.upload_mbps = result.upload_mbps as f32;

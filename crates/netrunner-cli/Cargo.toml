@@ -52,6 +52,10 @@ ratatui-widgets = { workspace = true }
 tui-piechart = { workspace = true }
 tui-chart = { workspace = true }
 tui-spinner = { workspace = true }
+tui-rating = { workspace = true }
+tui-slider = { workspace = true }
+tui-checkbox = { workspace = true }
+tui-file-explorer = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
