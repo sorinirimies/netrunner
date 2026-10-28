@@ -52,6 +52,11 @@ const WARMUP_SECS: f64 = 3.0;
 /// `/__down` to every server, but only Cloudflare serves it, so half the
 /// connections transferred nothing and the result was badly under-reported.)
 const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=50000000";
+/// Used when the primary endpoint rejects us (rate limit / block).
+const DOWNLOAD_FALLBACKS: [&str; 2] = [
+    "https://proof.ovh.net/files/1Gb.dat",
+    "http://ipv4.download.thinkbroadband.com/50MB.zip",
+];
 const UPLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__up";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1110,6 +1115,24 @@ impl SpeedTest {
         Ok(server)
     }
 
+    /// First download source that accepts a 1-byte ranged request.
+    async fn pick_download_source(&self) -> &'static str {
+        for url in std::iter::once(DOWNLOAD_ENDPOINT).chain(DOWNLOAD_FALLBACKS) {
+            let ok = self
+                .client
+                .get(url)
+                .header(reqwest::header::RANGE, "bytes=0-0")
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await
+                .is_ok_and(|r| r.status().is_success());
+            if ok {
+                return url;
+            }
+        }
+        DOWNLOAD_ENDPOINT
+    }
+
     /// Progressive download test against a reliable anycast backend.
     ///
     /// Fixes vs the old implementation: uses a real speed-test endpoint (so
@@ -1130,10 +1153,20 @@ impl SpeedTest {
         let test_duration = Duration::from_secs(TEST_SECS);
         let loaded_probe = self.spawn_loaded_probe(probe_url, start + test_duration);
 
+        let source = self.pick_download_source().await;
+        if source != DOWNLOAD_ENDPOINT {
+            emit(
+                &self.events,
+                TestEvent::Warning(
+                    "Primary download endpoint refused us — using a fallback source".into(),
+                ),
+            );
+        }
+
         let mut handles = Vec::new();
         for _ in 0..PARALLEL_CONNECTIONS {
             let blocked = Arc::clone(&blocked);
-            let url = DOWNLOAD_ENDPOINT.to_string();
+            let url = source.to_string();
             let client = self.client.clone();
             let total_bytes = Arc::clone(&total_bytes);
             let test_start = start;
