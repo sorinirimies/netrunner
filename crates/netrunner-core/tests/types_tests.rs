@@ -83,6 +83,7 @@ fn test_speed_test_result_with_values() {
     let timestamp = Utc::now();
 
     let result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp,
         download_mbps: 75.5,
         upload_mbps: 15.2,
@@ -248,6 +249,7 @@ fn test_network_diagnostics_creation() {
 #[test]
 fn test_enhanced_speed_test_result_with_jitter_and_packet_loss() {
     let result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp: Utc::now(),
         download_mbps: 85.7,
         upload_mbps: 18.3,

@@ -148,7 +148,7 @@ impl HistoryStorage {
                 break;
             }
             let (_, value) = item?;
-            if let Ok(result) = postcard::from_bytes::<SpeedTestResult>(value.value()) {
+            if let Ok(result) = SpeedTestResult::from_postcard(value.value()).ok_or(()) {
                 results.push(result);
             }
         }
@@ -165,7 +165,7 @@ impl HistoryStorage {
 
         for item in table.iter()?.rev() {
             let (_, value) = item?;
-            if let Ok(result) = postcard::from_bytes::<SpeedTestResult>(value.value()) {
+            if let Ok(result) = SpeedTestResult::from_postcard(value.value()).ok_or(()) {
                 results.push(result);
             }
         }
@@ -195,7 +195,7 @@ impl HistoryStorage {
 
         for item in table.range(start_slice..=end_slice)? {
             let (_, value) = item?;
-            if let Ok(result) = postcard::from_bytes::<SpeedTestResult>(value.value()) {
+            if let Ok(result) = SpeedTestResult::from_postcard(value.value()).ok_or(()) {
                 results.push(result);
             }
         }
@@ -445,7 +445,7 @@ impl HistoryStorage {
                 let (_, value) = item?;
 
                 // Deserialize to check timestamp
-                if let Ok(result) = postcard::from_bytes::<SpeedTestResult>(value.value()) {
+                if let Ok(result) = SpeedTestResult::from_postcard(value.value()).ok_or(()) {
                     let result_nanos = result.timestamp.timestamp_nanos_opt().unwrap_or_default();
 
                     if result_nanos < cutoff_nanos {
@@ -580,7 +580,7 @@ impl HistoryStorage {
                 let (_, value) = item?;
 
                 // Deserialize to check timestamp
-                if let Ok(result) = postcard::from_bytes::<SpeedTestResult>(value.value()) {
+                if let Ok(result) = SpeedTestResult::from_postcard(value.value()).ok_or(()) {
                     let result_nanos = result.timestamp.timestamp_nanos_opt().unwrap_or_default();
 
                     if result_nanos < cutoff_nanos {
@@ -708,6 +708,7 @@ mod tests {
 
         let store = HistoryStorage::new().expect("should open after migrating");
         let r = SpeedTestResult {
+            loaded_latency_ms: None,
             download_mbps: 42.0,
             ..Default::default()
         };
@@ -736,6 +737,7 @@ mod tests {
         let storage = HistoryStorage::new_with_path(db_path).unwrap();
 
         let result = SpeedTestResult {
+            loaded_latency_ms: None,
             timestamp: Utc::now(),
             download_mbps: 100.0,
             upload_mbps: 50.0,

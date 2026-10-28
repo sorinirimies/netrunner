@@ -144,6 +144,7 @@ async fn test_quality_boundary_conditions() {
 #[tokio::test]
 async fn test_speed_test_result_validation() {
     let result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp: Utc::now(),
         download_mbps: 50.5,
         upload_mbps: 10.2,
@@ -330,6 +331,7 @@ async fn test_error_handling() {
 #[tokio::test]
 async fn test_json_serialization() {
     let result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp: Utc::now(),
         download_mbps: 100.5,
         upload_mbps: 20.3,
@@ -368,6 +370,7 @@ async fn test_json_serialization() {
 async fn test_performance_metrics_integration() {
     // Test that jitter and packet loss are properly integrated
     let result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp: Utc::now(),
         download_mbps: 50.0,
         upload_mbps: 10.0,

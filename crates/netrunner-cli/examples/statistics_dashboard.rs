@@ -147,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ) in SEED
         {
             let result = SpeedTestResult {
+                loaded_latency_ms: None,
                 timestamp: now - Duration::days(*days_ago),
                 download_mbps: *download_mbps,
                 upload_mbps: *upload_mbps,

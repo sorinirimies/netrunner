@@ -55,6 +55,75 @@ pub struct SpeedTestResult {
     pub quality: ConnectionQuality,
     pub test_duration_seconds: f64,
     pub isp: Option<String>,
+    /// Median latency measured *while* the link was saturated (bufferbloat).
+    /// `None` for results recorded before this was measured.
+    #[serde(default)]
+    pub loaded_latency_ms: Option<f64>,
+}
+
+/// Layout of [`SpeedTestResult`] before `loaded_latency_ms` was added; used to
+/// keep reading history written by older versions (postcard is positional).
+#[derive(Deserialize)]
+struct SpeedTestResultV1 {
+    timestamp: DateTime<Utc>,
+    download_mbps: f64,
+    upload_mbps: f64,
+    ping_ms: f64,
+    jitter_ms: f64,
+    packet_loss_percent: f64,
+    server_location: String,
+    server_ip: Option<IpAddr>,
+    client_ip: Option<IpAddr>,
+    quality: ConnectionQuality,
+    test_duration_seconds: f64,
+    isp: Option<String>,
+}
+
+impl SpeedTestResult {
+    /// Decode a stored record, accepting both the current and the legacy layout.
+    pub fn from_postcard(bytes: &[u8]) -> Option<Self> {
+        if let Ok(r) = postcard::from_bytes::<Self>(bytes) {
+            return Some(r);
+        }
+        let v1: SpeedTestResultV1 = postcard::from_bytes(bytes).ok()?;
+        Some(Self {
+            timestamp: v1.timestamp,
+            download_mbps: v1.download_mbps,
+            upload_mbps: v1.upload_mbps,
+            ping_ms: v1.ping_ms,
+            jitter_ms: v1.jitter_ms,
+            packet_loss_percent: v1.packet_loss_percent,
+            server_location: v1.server_location,
+            server_ip: v1.server_ip,
+            client_ip: v1.client_ip,
+            quality: v1.quality,
+            test_duration_seconds: v1.test_duration_seconds,
+            isp: v1.isp,
+            loaded_latency_ms: None,
+        })
+    }
+
+    /// Extra latency under load (`loaded - idle`), clamped at 0.
+    pub fn bufferbloat_ms(&self) -> Option<f64> {
+        self.loaded_latency_ms.map(|l| (l - self.ping_ms).max(0.0))
+    }
+
+    /// Letter grade for [`Self::bufferbloat_ms`].
+    pub fn bufferbloat_grade(&self) -> Option<&'static str> {
+        self.bufferbloat_ms().map(bufferbloat_grade)
+    }
+}
+
+/// Grade added latency under load: A+ (<5 ms) … F (≥400 ms).
+pub fn bufferbloat_grade(added_ms: f64) -> &'static str {
+    match added_ms {
+        x if x < 5.0 => "A+",
+        x if x < 30.0 => "A",
+        x if x < 60.0 => "B",
+        x if x < 200.0 => "C",
+        x if x < 400.0 => "D",
+        _ => "F",
+    }
 }
 
 impl Default for SpeedTestResult {
@@ -72,6 +141,7 @@ impl Default for SpeedTestResult {
             quality: ConnectionQuality::Failed,
             test_duration_seconds: 0.0,
             isp: None,
+            loaded_latency_ms: None,
         }
     }
 }
@@ -176,6 +246,58 @@ impl Default for TestConfig {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn legacy_postcard_records_still_decode() {
+        #[derive(serde::Serialize)]
+        struct Old {
+            timestamp: chrono::DateTime<chrono::Utc>,
+            d: f64,
+            u: f64,
+            p: f64,
+            j: f64,
+            l: f64,
+            loc: String,
+            sip: Option<std::net::IpAddr>,
+            cip: Option<std::net::IpAddr>,
+            q: crate::ConnectionQuality,
+            dur: f64,
+            isp: Option<String>,
+        }
+        let old = Old {
+            timestamp: chrono::Utc::now(),
+            d: 1.0,
+            u: 2.0,
+            p: 3.0,
+            j: 4.0,
+            l: 0.0,
+            loc: "X".into(),
+            sip: None,
+            cip: None,
+            q: crate::ConnectionQuality::Good,
+            dur: 9.0,
+            isp: Some("I".into()),
+        };
+        let bytes = postcard::to_stdvec(&old).unwrap();
+        let r = super::SpeedTestResult::from_postcard(&bytes).unwrap();
+        assert_eq!(r.download_mbps, 1.0);
+        assert_eq!(r.loaded_latency_ms, None);
+        let new = postcard::to_stdvec(&r).unwrap();
+        assert_eq!(
+            super::SpeedTestResult::from_postcard(&new)
+                .unwrap()
+                .isp
+                .as_deref(),
+            Some("I")
+        );
+    }
+
+    #[test]
+    fn bufferbloat_grades() {
+        assert_eq!(super::bufferbloat_grade(2.0), "A+");
+        assert_eq!(super::bufferbloat_grade(45.0), "B");
+        assert_eq!(super::bufferbloat_grade(900.0), "F");
+    }
+
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
 

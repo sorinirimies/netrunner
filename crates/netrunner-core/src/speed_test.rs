@@ -154,13 +154,8 @@ impl SpeedTest {
         // Phase 4: Measure latency
         let ping_ms = self.measure_latency(&best_servers[0]).await?;
 
-        // Phase 5: Download test (progressive)
-        let download_mbps = self.progressive_download_test().await?;
-
-        // Phase 6: Upload test (progressive)
-        let upload_mbps = self.progressive_upload_test().await?;
-
-        // Phase 7: Calculate statistics
+        // Phase 5: Jitter + loss on the *idle* link (measuring them after the
+        // transfers would capture the queues those transfers just filled).
         emit(&self.events, TestEvent::PhaseStarted(Phase::Jitter));
         let (jitter_ms, packet_loss) = self.measure_jitter_and_loss(&best_servers[0]).await?;
         emit(
@@ -170,6 +165,13 @@ impl SpeedTest {
                 packet_loss_percent: packet_loss,
             },
         );
+
+        // Phase 6/7: throughput, with latency probed under load (bufferbloat).
+        let probe_url = best_servers[0].url.clone();
+        let (download_mbps, mut loaded) = self.progressive_download_test(&probe_url).await?;
+        let (upload_mbps, loaded_up) = self.progressive_upload_test(&probe_url).await?;
+        loaded.extend(loaded_up);
+        let loaded_latency_ms = (!loaded.is_empty()).then(|| median(&loaded));
 
         let quality = ConnectionQuality::from_speed_and_ping(download_mbps, upload_mbps, ping_ms);
         let test_duration = start.elapsed().as_secs_f64();
@@ -187,6 +189,7 @@ impl SpeedTest {
             quality,
             test_duration_seconds: test_duration,
             isp: geo.isp.clone(),
+            loaded_latency_ms,
         };
 
         emit(&self.events, TestEvent::Completed(Box::new(result.clone())));
@@ -1110,7 +1113,10 @@ impl SpeedTest {
     /// every connection transfers data), a lock-free counter, and a
     /// warmup-excluded, outlier-trimmed *sustained* throughput — which is what
     /// speedtest.net reports.
-    async fn progressive_download_test(&self) -> Result<f64, Box<dyn std::error::Error>> {
+    async fn progressive_download_test(
+        &self,
+        probe_url: &str,
+    ) -> Result<(f64, Vec<f64>), Box<dyn std::error::Error>> {
         emit(&self.events, TestEvent::PhaseStarted(Phase::Download));
 
         // Lock-free shared byte counter: at gigabit speeds a Mutex locked on
@@ -1118,6 +1124,7 @@ impl SpeedTest {
         let total_bytes = Arc::new(AtomicU64::new(0));
         let start = Instant::now();
         let test_duration = Duration::from_secs(TEST_SECS);
+        let loaded_probe = self.spawn_loaded_probe(probe_url, start + test_duration);
 
         let mut handles = Vec::new();
         for _ in 0..PARALLEL_CONNECTIONS {
@@ -1170,16 +1177,20 @@ impl SpeedTest {
 
         let mbps = sustained_mbps(&samples, WARMUP_SECS).clamp(0.0, 10_000.0);
         emit(&self.events, TestEvent::DownloadComplete { mbps });
-        Ok(mbps)
+        Ok((mbps, loaded_probe.await.unwrap_or_default()))
     }
 
     /// Progressive upload test against the reliable anycast backend.
-    async fn progressive_upload_test(&self) -> Result<f64, Box<dyn std::error::Error>> {
+    async fn progressive_upload_test(
+        &self,
+        probe_url: &str,
+    ) -> Result<(f64, Vec<f64>), Box<dyn std::error::Error>> {
         emit(&self.events, TestEvent::PhaseStarted(Phase::Upload));
 
         let total_bytes = Arc::new(AtomicU64::new(0));
         let start = Instant::now();
         let test_duration = Duration::from_secs(TEST_SECS);
+        let loaded_probe = self.spawn_loaded_probe(probe_url, start + test_duration);
 
         // Bodies are streamed in 64 KiB chunks and counted as the transport
         // pulls them, so live samples are smooth even on slow links (counting
@@ -1230,7 +1241,31 @@ impl SpeedTest {
 
         let mbps = sustained_mbps(&samples, WARMUP_SECS).clamp(0.0, 10_000.0);
         emit(&self.events, TestEvent::UploadComplete { mbps });
-        Ok(mbps)
+        Ok((mbps, loaded_probe.await.unwrap_or_default()))
+    }
+
+    /// Probe latency while a transfer saturates the link. Starts after the
+    /// warm-up window (queues need to fill first) and stops at `deadline`.
+    fn spawn_loaded_probe(
+        &self,
+        url: &str,
+        deadline: Instant,
+    ) -> tokio::task::JoinHandle<Vec<f64>> {
+        let client = self.client.clone();
+        let url = url.to_string();
+        let events = self.events.clone();
+        tokio::spawn(async move {
+            let mut samples = Vec::new();
+            tokio::time::sleep(Duration::from_secs_f64(WARMUP_SECS)).await;
+            while Instant::now() < deadline {
+                if let Some(ms) = probe_ms(&client, &url, Duration::from_secs(3)).await {
+                    samples.push(ms);
+                    emit(&events, TestEvent::LoadedLatency { ms });
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+            samples
+        })
     }
 
     async fn measure_latency(

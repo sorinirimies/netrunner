@@ -178,6 +178,7 @@ mod tests {
     #[test]
     fn history_is_escaped() {
         let r = SpeedTestResult {
+            loaded_latency_ms: None,
             server_location: "<script>alert(1)</script>".into(),
             ..Default::default()
         };
@@ -209,6 +210,7 @@ mod tests {
     #[test]
     fn completed_carries_quality_colour() {
         let result = SpeedTestResult {
+            loaded_latency_ms: None,
             quality: ConnectionQuality::Excellent,
             ..Default::default()
         };

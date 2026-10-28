@@ -187,7 +187,8 @@ async fn render_speed_event(
         TestEvent::Completed(result) => {
             display_results(&result);
         }
-        TestEvent::LatencyProgress { .. }
+        TestEvent::LoadedLatency { .. }
+        | TestEvent::LatencyProgress { .. }
         | TestEvent::JitterComplete { .. }
         | TestEvent::DiagnosticsComplete(_) => {}
     }

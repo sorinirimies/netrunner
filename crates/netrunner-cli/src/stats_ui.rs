@@ -904,6 +904,7 @@ mod tests {
     fn app(n: usize) -> StatsApp {
         let results: Vec<SpeedTestResult> = (0..n)
             .map(|i| SpeedTestResult {
+                loaded_latency_ms: None,
                 download_mbps: 40.0 + i as f64 * 3.0,
                 upload_mbps: 10.0 + i as f64,
                 ping_ms: 12.0 + (i % 5) as f64,

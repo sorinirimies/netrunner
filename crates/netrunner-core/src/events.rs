@@ -104,6 +104,8 @@ pub enum TestEvent {
     LatencyProgress { avg_ms: f64 },
     /// Final measured latency.
     LatencyComplete { avg_ms: f64 },
+    /// Latency measured while the link was saturated (bufferbloat probe).
+    LoadedLatency { ms: f64 },
     /// Final jitter and packet-loss.
     JitterComplete {
         jitter_ms: f64,

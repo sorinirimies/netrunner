@@ -305,6 +305,7 @@ impl SpeedApp {
             TestEvent::LatencyProgress { avg_ms } | TestEvent::LatencyComplete { avg_ms } => {
                 self.ping_ms = avg_ms as f32;
             }
+            TestEvent::LoadedLatency { .. } => {}
             TestEvent::Completed(result) => {
                 self.download_mbps = result.download_mbps as f32;
                 self.upload_mbps = result.upload_mbps as f32;
@@ -381,6 +382,7 @@ mod tests {
     fn completed_populates_result_and_metrics() {
         let mut app = SpeedApp::new();
         let result = netrunner_core::SpeedTestResult {
+            loaded_latency_ms: None,
             download_mbps: 250.0,
             upload_mbps: 40.0,
             ping_ms: 12.0,
@@ -429,6 +431,7 @@ mod tests {
         assert_eq!(app.history.len(), 0, "fresh HOME should have empty history");
 
         app.result = Some(netrunner_core::SpeedTestResult {
+            loaded_latency_ms: None,
             download_mbps: 100.0,
             upload_mbps: 20.0,
             ping_ms: 5.0,

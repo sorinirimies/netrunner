@@ -32,6 +32,7 @@ fn test_connection_quality_from_speed_and_ping() {
 #[test]
 fn test_speed_test_result_creation() {
     let test_result = SpeedTestResult {
+        loaded_latency_ms: None,
         timestamp: Utc::now(),
         download_mbps: 75.5,
         upload_mbps: 15.2,
