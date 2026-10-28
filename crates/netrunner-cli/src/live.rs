@@ -54,6 +54,7 @@ pub struct LiveState {
     jitter_ms: Option<f64>,
     done: bool,
     finished: bool,
+    summary: Option<String>,
 }
 
 impl LiveState {
@@ -73,6 +74,7 @@ impl LiveState {
             jitter_ms: None,
             done: false,
             finished: false,
+            summary: None,
         }
     }
 
@@ -110,7 +112,18 @@ impl LiveState {
                 self.ping.push(avg_ms);
             }
             TestEvent::JitterComplete { jitter_ms, .. } => self.jitter_ms = Some(jitter_ms),
-            TestEvent::Completed(_) => self.done = true,
+            TestEvent::Completed(r) => {
+                self.done = true;
+                self.summary = Some(format!(
+                    "{:?} connection · loss {:.1}% · {:.0}s{}",
+                    r.quality,
+                    r.packet_loss_percent,
+                    r.test_duration_seconds,
+                    r.isp
+                        .as_deref()
+                        .map_or(String::new(), |i| format!(" · {i}")),
+                ));
+            }
             _ => {}
         }
     }
@@ -216,7 +229,7 @@ fn draw_header(frame: &mut Frame, area: Rect, s: &LiveState) {
     }
     spans.pop();
     let mut lines = vec![Line::from(spans)];
-    let mut info = s.status.clone();
+    let mut info = s.summary.clone().unwrap_or_else(|| s.status.clone());
     if let Some(loc) = &s.location {
         info = format!("{info}  ·  📍 {loc}");
     }

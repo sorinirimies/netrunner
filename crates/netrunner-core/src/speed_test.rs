@@ -15,6 +15,7 @@
 //! - Support for speeds up to 10 Gbps, with graceful failure (0 Mbps ->
 //!   `ConnectionQuality::Failed`) instead of a misleading floor.
 
+use bytes::Bytes;
 use chrono::Utc;
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
@@ -32,6 +33,10 @@ use crate::types::{
 
 const PARALLEL_CONNECTIONS: usize = 50;
 const SERVER_SELECTION_COUNT: usize = 3;
+const LATENCY_SAMPLES: usize = 10;
+const UPLOAD_CHUNK_BYTES: usize = 64 * 1024;
+/// 80 × 64 KiB = 5 MiB per upload request.
+const UPLOAD_CHUNKS_PER_REQUEST: usize = 80;
 /// Total wall-clock duration of a throughput phase.
 const TEST_SECS: u64 = 15;
 /// Initial window excluded from the final throughput calc (TCP slow-start).
@@ -43,7 +48,7 @@ const WARMUP_SECS: f64 = 3.0;
 /// makes the numbers comparable to speedtest.net. (The previous code appended
 /// `/__down` to every server, but only Cloudflare serves it, so half the
 /// connections transferred nothing and the result was badly under-reported.)
-const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=100000000";
+const DOWNLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__down?bytes=25000000";
 const UPLOAD_ENDPOINT: &str = "https://speed.cloudflare.com/__up";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1084,28 +1089,18 @@ impl SpeedTest {
         client: &Client,
         server: &TestServer,
     ) -> Result<TestServer, Box<dyn std::error::Error>> {
-        let mut latencies = Vec::new();
         let mut server = server.clone();
-
+        // First probe opens the connection (handshake); later probes measure
+        // the path. Rank servers by their best steady-state round trip.
+        let timeout = Duration::from_secs(2);
+        let _ = probe_ms(client, &server.url, timeout).await;
+        let mut best: Option<f64> = None;
         for _ in 0..3 {
-            let start = Instant::now();
-            match client
-                .head(&server.url)
-                .timeout(Duration::from_secs(2))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() || resp.status().is_redirection() => {
-                    latencies.push(start.elapsed().as_millis() as f64);
-                }
-                _ => {}
+            if let Some(ms) = probe_ms(client, &server.url, timeout).await {
+                best = Some(best.map_or(ms, |b| b.min(ms)));
             }
         }
-
-        if !latencies.is_empty() {
-            server.latency_ms = Some(latencies.iter().sum::<f64>() / latencies.len() as f64);
-        }
-
+        server.latency_ms = best;
         Ok(server)
     }
 
@@ -1135,6 +1130,10 @@ impl SpeedTest {
                 let end_time = test_start + test_duration;
                 while Instant::now() < end_time {
                     match client.get(&url).send().await {
+                        Ok(response) if !response.status().is_success() => {
+                            // e.g. 403/429: don't spin; back off and retry.
+                            tokio::time::sleep(Duration::from_millis(250)).await;
+                        }
                         Ok(response) => {
                             let mut stream = response.bytes_stream();
                             while let Some(chunk_result) = stream.next().await {
@@ -1182,32 +1181,35 @@ impl SpeedTest {
         let start = Instant::now();
         let test_duration = Duration::from_secs(TEST_SECS);
 
-        // 5 MB chunks streamed repeatedly for the duration of the test.
-        let chunk_size = 5 * 1024 * 1024;
-        let test_data = vec![0u8; chunk_size];
+        // Bodies are streamed in 64 KiB chunks and counted as the transport
+        // pulls them, so live samples are smooth even on slow links (counting
+        // only completed 5 MB requests produced bursty 0/huge samples).
+        let chunk = Bytes::from(vec![0u8; UPLOAD_CHUNK_BYTES]);
 
         let mut handles = Vec::new();
         for _ in 0..10 {
             let url = UPLOAD_ENDPOINT.to_string();
             let client = self.client.clone();
             let total_bytes = Arc::clone(&total_bytes);
-            let data = test_data.clone();
+            let chunk = chunk.clone();
             let test_start = start;
 
             let handle = tokio::spawn(async move {
                 let end_time = test_start + test_duration;
                 while Instant::now() < end_time {
-                    match client
+                    let body = counting_body(Arc::clone(&total_bytes), chunk.clone(), end_time);
+                    let sent = client
                         .post(&url)
-                        .body(data.clone())
-                        .timeout(Duration::from_secs(10))
+                        .header(
+                            reqwest::header::CONTENT_LENGTH,
+                            UPLOAD_CHUNK_BYTES * UPLOAD_CHUNKS_PER_REQUEST,
+                        )
+                        .body(body)
+                        .timeout(Duration::from_secs(15))
                         .send()
-                        .await
-                    {
-                        Ok(_) => {
-                            total_bytes.fetch_add(data.len() as u64, Ordering::Relaxed);
-                        }
-                        Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
+                        .await;
+                    if sent.is_err() {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                 }
             });
@@ -1237,49 +1239,30 @@ impl SpeedTest {
     ) -> Result<f64, Box<dyn std::error::Error>> {
         emit(&self.events, TestEvent::PhaseStarted(Phase::Latency));
 
+        // Sample 0 pays for DNS + TCP + TLS setup, so it is a warm-up and is
+        // not counted; the reported value is the median of the rest.
+        let _ = probe_ms(&self.client, &server.url, Duration::from_secs(2)).await;
         let mut latencies = Vec::new();
-
-        for _i in 0..10 {
-            let start = Instant::now();
-            match self
-                .client
-                .head(&server.url)
-                .timeout(Duration::from_secs(2))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() || resp.status().is_redirection() => {
-                    let latency = start.elapsed().as_millis() as f64;
-                    latencies.push(latency);
-
-                    let current_avg = latencies.iter().sum::<f64>() / latencies.len() as f64;
-                    emit(
-                        &self.events,
-                        TestEvent::LatencyProgress {
-                            avg_ms: current_avg,
-                        },
-                    );
-                }
-                _ => {}
+        for _ in 0..LATENCY_SAMPLES {
+            if let Some(ms) = probe_ms(&self.client, &server.url, Duration::from_secs(2)).await {
+                latencies.push(ms);
+                emit(
+                    &self.events,
+                    TestEvent::LatencyProgress {
+                        avg_ms: median(&latencies),
+                    },
+                );
             }
-
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        let avg_latency = if !latencies.is_empty() {
-            latencies.iter().sum::<f64>() / latencies.len() as f64
-        } else {
+        let latency = if latencies.is_empty() {
             50.0
+        } else {
+            median(&latencies)
         };
-
-        emit(
-            &self.events,
-            TestEvent::LatencyComplete {
-                avg_ms: avg_latency,
-            },
-        );
-
-        Ok(avg_latency)
+        emit(&self.events, TestEvent::LatencyComplete { avg_ms: latency });
+        Ok(latency)
     }
 
     async fn measure_jitter_and_loss(
@@ -1291,36 +1274,15 @@ impl SpeedTest {
         let total = 20;
 
         for _ in 0..total {
-            let start = Instant::now();
-            match self
-                .client
-                .head(&server.url)
-                .timeout(Duration::from_secs(1))
-                .send()
-                .await
-            {
-                Ok(resp) if resp.status().is_success() || resp.status().is_redirection() => {
-                    latencies.push(start.elapsed().as_millis() as f64);
-                }
-                _ => {
-                    lost += 1;
-                }
+            match probe_ms(&self.client, &server.url, Duration::from_secs(1)).await {
+                Some(ms) => latencies.push(ms),
+                None => lost += 1,
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
-        let jitter = if latencies.len() > 1 {
-            let mean = latencies.iter().sum::<f64>() / latencies.len() as f64;
-            let variance =
-                latencies.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / latencies.len() as f64;
-            variance.sqrt()
-        } else {
-            0.0
-        };
-
         let packet_loss = (lost as f64 / total as f64) * 100.0;
-
-        Ok((jitter, packet_loss))
+        Ok((jitter_ms(&latencies), packet_loss))
     }
 
     async fn get_client_ip(&self) -> Option<IpAddr> {
@@ -1393,6 +1355,54 @@ fn build_geo(
         longitude,
         isp,
     })
+}
+
+/// One HEAD round trip in milliseconds (sub-ms precision); `None` on failure.
+async fn probe_ms(client: &Client, url: &str, timeout: Duration) -> Option<f64> {
+    let start = Instant::now();
+    let resp = client.head(url).timeout(timeout).send().await.ok()?;
+    (resp.status().is_success() || resp.status().is_redirection())
+        .then(|| start.elapsed().as_secs_f64() * 1000.0)
+}
+
+/// Median of a slice (`0.0` when empty); robust against single slow probes.
+fn median(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mut v = values.to_vec();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mid = v.len() / 2;
+    if v.len().is_multiple_of(2) {
+        (v[mid - 1] + v[mid]) / 2.0
+    } else {
+        v[mid]
+    }
+}
+
+/// Jitter as the mean absolute difference between consecutive latency samples
+/// (RFC 3550 style). Unlike standard deviation it ignores a steady offset and
+/// measures actual sample-to-sample variation.
+fn jitter_ms(latencies: &[f64]) -> f64 {
+    if latencies.len() < 2 {
+        return 0.0;
+    }
+    let sum: f64 = latencies.windows(2).map(|w| (w[1] - w[0]).abs()).sum();
+    sum / (latencies.len() - 1) as f64
+}
+
+/// Request body of `UPLOAD_CHUNKS_PER_REQUEST` chunks that adds each chunk to
+/// `total` as the transport pulls it, stopping early at `deadline`.
+fn counting_body(total: Arc<AtomicU64>, chunk: Bytes, deadline: Instant) -> reqwest::Body {
+    let len = chunk.len() as u64;
+    let stream = futures::stream::iter(0..UPLOAD_CHUNKS_PER_REQUEST).map(move |_| {
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::other("upload window closed"));
+        }
+        total.fetch_add(len, Ordering::Relaxed);
+        Ok::<_, std::io::Error>(chunk.clone())
+    });
+    reqwest::Body::wrap_stream(stream)
 }
 
 /// Poll a shared byte counter every 200 ms, emit live throughput samples, and
@@ -1480,6 +1490,17 @@ fn sustained_mbps(samples: &[(f64, f64)], warmup_secs: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn median_and_jitter() {
+        assert_eq!(median(&[]), 0.0);
+        assert_eq!(median(&[5.0, 1.0, 100.0]), 5.0);
+        assert_eq!(median(&[1.0, 2.0, 3.0, 4.0]), 2.5);
+        assert_eq!(jitter_ms(&[10.0]), 0.0);
+        // Constant offset => no jitter; alternating => mean |diff|.
+        assert_eq!(jitter_ms(&[20.0, 20.0, 20.0]), 0.0);
+        assert!((jitter_ms(&[10.0, 14.0, 10.0, 14.0]) - 4.0).abs() < 1e-9);
+    }
 
     #[test]
     fn sustained_mbps_excludes_warmup() {
