@@ -5,6 +5,8 @@ A fast, cyberpunk-styled internet **speed test & network diagnostics** toolkit i
 [![crates.io](https://img.shields.io/crates/v/netrunner_cli?label=netrunner_cli)](https://crates.io/crates/netrunner_cli)
 [![core docs](https://img.shields.io/docsrs/netrunner-core?label=netrunner-core%20docs)](https://docs.rs/netrunner-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Audit](https://github.com/sorinirimies/netrunner/actions/workflows/security.yml/badge.svg)](https://github.com/sorinirimies/netrunner/actions/workflows/security.yml)
+[![Fuzz](https://github.com/sorinirimies/netrunner/actions/workflows/fuzz.yml/badge.svg)](https://github.com/sorinirimies/netrunner/actions/workflows/fuzz.yml)
 
 ```
 ┌ netrunner-core ┐        the engine — no UI, embeddable
