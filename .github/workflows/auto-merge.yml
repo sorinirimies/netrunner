@@ -1,22 +1,18 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Auto-merge — automatically approve and merge Dependabot PRs
+# Auto-merge — merge Dependabot PRs (patch, minor AND major) once CI succeeds
 # ──────────────────────────────────────────────────────────────────────────────
-# Dependabot is configured for GitHub Actions only (see .github/dependabot.yml).
-# Cargo dependency upgrades are handled by the Nightly Dependency Upgrade
-# workflow on Gitea.
+# No branch protection is needed: this runs after the CI workflow completes and
+# only merges when CI concluded successfully.
 #
-# If CI passes, all Action bumps (patch, minor, major) are approved and
-# merged automatically so they don't pile up.
-#
-# Requirements:
-#   • The repo must have "Allow auto-merge" enabled in Settings → General.
-#   • Branch protection rules must require status checks to pass before merging.
+# Requirements: none beyond Actions having write permission (set below).
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Auto-merge Dependabot
 
 on:
-  pull_request:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -26,23 +22,20 @@ jobs:
   auto-merge:
     name: Auto-merge
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
     steps:
-      - name: Fetch Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v3
-        with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-
-      # Auto-merge every update type (incl. major); branch protection gates on CI.
-      - name: Approve PR
-        run: gh pr review --approve "$PR_URL"
+      - name: Merge PR (squash)
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Enable auto-merge (squash)
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,headRefOid \
+            --jq ".[] | select(.headRefOid==\"$SHA\") | .number" | head -n1)
+          if [ -z "$pr" ]; then echo "No open PR for $BRANCH@$SHA (stale run); skipping."; exit 0; fi
+          gh pr review --repo "$REPO" --approve "$pr" || true
+          gh pr merge --repo "$REPO" --squash "$pr"
