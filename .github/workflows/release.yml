@@ -100,7 +100,7 @@ jobs:
         run: tar -C target/release -czvf netrunner_cli-${{ needs.validate.outputs.tag }}-linux-x86_64.tar.gz netrunner_cli
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           body_path: RELEASE_NOTES.md
