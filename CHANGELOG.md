@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## 2.0.5 - 2026-11-02
+### ♻️ Refactor
+- refactor(ci): package macOS DMG and Windows installer with tested Nushell scripts
+### ✨ Features
+- feat(tui): theme stats TUI with tui-nuances (NETRUNNER_THEME, t/T)
+- feat(tui): live dashboard (tui-chart, tui-spinner) and history trend view; tui-piechart 1.4
+- feat(tui): keep final live chart until keypress, then print results
+- feat(core): bufferbloat (loaded latency) probe, idle jitter before transfers, legacy history decode
+- feat(cli): persistent tabbed workbench (tui-chart/spinner/rating/piechart/slider/checkbox/file-explorer); rate-limit-safe download; warnings
+### 🐛 Bug Fixes
+- fix(core): download endpoint 403 (25MB), sub-ms median latency, RFC3550 jitter, smooth streamed upload counting; live summary line
+- fix(core): fall back to OVH/thinkbroadband when Cloudflare rate-limits downloads
+### 📚 Documentation
+- docs: update README and CHANGELOG for v2.0.4
+- docs: fix history flag name
+- docs(readme): add the Audit and Fuzz badges
+- docs(ci): point NSIS header at the Nushell script
+### 🔄 CI
+- ci(security): add cargo-audit workflow and just audit recipe
+- ci: prebuilt Nushell, cargo-deny + cargo-audit security workflow
+- ci: nightly merges lockfile-only updates; bump + release only when a Cargo.toml requirement changes
+- ci: fix cargo deny/audit, add fuzz targets, netrunner-web (Topcoat) dashboard, justfile + workflow upgrades
+- ci(fuzz): pin gnu target (prebuilt cargo-fuzz defaults to musl)
+- ci: auto-merge major Dependabot updates when CI passes
+- ci(deps): bump dependabot/fetch-metadata from 2 to 3 (#1)
+- ci(deps): bump peter-evans/create-pull-request from 6 to 8 (#2)
+- ci(deps): bump softprops/action-gh-release from 2 to 3 (#3)
+- ci: merge Dependabot PRs only after CI succeeds (workflow_run)
+- ci(release): ship macOS universal DMGnetrunnernetrunner
+- ci(release): Windows NSIS setup.exe installer
+### 🔧 Chores
+- chore(justfile): skip unconfigured remotes in *-all recipes
+- chore(justfile): push/pull current branch instead of hardcoded main
+- chore(deps): bump tui-nuances to 0.1.10
+- chore: ignore .codegraph index
+**Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.4...v2.0.5
 ## 2.0.4 - 2026-07-17
 ### 🐛 Bug Fixes
 - fix(core): accurate throughput + GUI history trend charts
