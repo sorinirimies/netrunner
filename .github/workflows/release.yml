@@ -112,6 +112,59 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── 2b. macOS universal (GUI + CLI) and Windows CLI ───────────────────────────
+  macos:
+    name: macOS universal (GUI + CLI)
+    needs: [validate, build]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (arm64 + x86_64)
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --target $t -p netrunner -p netrunner_cli
+          done
+      - name: Package DMG
+        run: bash packaging/macos/create_dmg.sh ${{ needs.validate.outputs.tag }}
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          files: |
+            dist/*.dmg
+            dist/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    name: Windows CLI
+    needs: [validate, build]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build CLI
+        run: cargo build --release -p netrunner_cli
+      - name: Package zip
+        shell: pwsh
+        run: Compress-Archive -Path target/release/netrunner_cli.exe -DestinationPath netrunner_cli-${{ needs.validate.outputs.tag }}-windows-x86_64.zip
+      - name: Upload to release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          files: netrunner_cli-${{ needs.validate.outputs.tag }}-windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # ── 3. Publish core + CLI to crates.io (headless, dependency order) ───────────
   publish:
     name: Publish core + CLI
