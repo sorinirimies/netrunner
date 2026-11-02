@@ -125,13 +125,13 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
-      - name: Build (arm64 + x86_64)
-        run: |
-          for t in aarch64-apple-darwin x86_64-apple-darwin; do
-            cargo build --release --target $t -p netrunner -p netrunner_cli
-          done
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "*"
+
       - name: Package DMG
-        run: bash packaging/macos/create_dmg.sh ${{ needs.validate.outputs.tag }}
+        run: nu scripts/ci/package_macos.nu ${{ needs.validate.outputs.tag }} --build
       - name: Upload to release
         uses: softprops/action-gh-release@v3
         with:
@@ -152,22 +152,22 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: "*"
+
       - name: Build CLI
         run: cargo build --release -p netrunner_cli
-      - name: Package zip
-        shell: pwsh
-        run: Compress-Archive -Path target/release/netrunner_cli.exe -DestinationPath netrunner_cli-${{ needs.validate.outputs.tag }}-windows-x86_64.zip
       - name: Build installer (NSIS)
-        shell: bash
         run: |
           choco install nsis -y --no-progress
-          bash packaging/windows/build_installer.sh ${{ needs.validate.outputs.tag }} target/release
+          nu scripts/ci/package_windows.nu ${{ needs.validate.outputs.tag }} target/release
       - name: Upload to release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
           files: |
-            netrunner_cli-${{ needs.validate.outputs.tag }}-windows-x86_64.zip
             dist/*-setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
