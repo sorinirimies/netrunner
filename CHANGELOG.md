@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - chore(justfile): push/pull current branch instead of hardcoded main
 - chore(deps): bump tui-nuances to 0.1.10
 - chore: ignore .codegraph index
+- chore: bump version to 2.0.5
 **Full Changelog**: https://github.com/sorinirimies/netrunner/compare/v2.0.4...v2.0.5
 ## 2.0.4 - 2026-07-17
 ### 🐛 Bug Fixes
