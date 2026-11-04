@@ -32,7 +32,7 @@ strum_macros = "0.28"
 rand = "0.10"
 dns-lookup = "3.0"
 redb = "4"
-postcard = { version = "1.1", features = ["use-std"] }
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 dirs = "6.0"
 
 # TUI (netrunner-cli)
