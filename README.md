@@ -101,7 +101,8 @@ netrunner                     # after `cargo install netrunner`
 ```
 
 > The GUI needs a GPUI-capable platform (macOS, or Linux with the usual
-> Vulkan/Wayland/X11 libraries). The core engine and TUI are fully headless.
+> Vulkan/Wayland/X11 libraries; Windows is not supported). The core engine and
+> TUI are fully headless.
 
 ## Library — `netrunner-core`
 
@@ -207,7 +208,6 @@ just build            # build everything
 just run-tui          # run the terminal app
 just run-gui          # run the desktop app
 just test             # full workspace test suite
-just test-headless    # core + CLI only (no GPUI, mirrors CI)
 just release 1.2.3    # gate → bump → tag → push → publish (via CI)
 ```
 

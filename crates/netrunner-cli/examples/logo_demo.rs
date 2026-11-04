@@ -19,13 +19,13 @@ use std::io;
 use crossterm::{
     event::{self, Event},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use netrunner_cli::{NetrunnerLogo, NetrunnerLogoSize};
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
-    Terminal,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

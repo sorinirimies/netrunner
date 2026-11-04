@@ -44,6 +44,7 @@ pub const SERVER_PRESETS: &[&str] = &[
 ];
 
 /// The root application entity.
+#[derive(Debug)]
 pub struct SpeedApp {
     pub config: TestConfig,
     pub settings: Settings,
@@ -67,6 +68,9 @@ pub struct SpeedApp {
 
     /// Recent past runs, newest first (read from the shared redb history).
     pub history: Vec<SpeedTestResult>,
+
+    /// Where the history database lives; `None` is the user's config directory.
+    pub history_dir: Option<std::path::PathBuf>,
 }
 
 impl SpeedApp {
@@ -91,6 +95,7 @@ impl SpeedApp {
             server: None,
             result: None,
             history: Vec::new(),
+            history_dir: None,
         }
     }
 
@@ -104,12 +109,20 @@ impl SpeedApp {
         self.reload_history();
     }
 
+    /// The history database in [`Self::history_dir`].
+    fn history_store(&self) -> Result<HistoryStorage, Box<dyn std::error::Error>> {
+        match &self.history_dir {
+            Some(dir) => HistoryStorage::open_in(dir),
+            None => HistoryStorage::new(),
+        }
+    }
+
     /// Re-read recent runs from the shared history database.
     pub fn reload_history(&mut self) {
-        if let Ok(store) = HistoryStorage::new() {
-            if let Ok(results) = store.get_recent_results(self.settings.max_history) {
-                self.history = results;
-            }
+        if let Ok(store) = self.history_store()
+            && let Ok(results) = store.get_recent_results(self.settings.max_history)
+        {
+            self.history = results;
         }
     }
 
@@ -122,7 +135,7 @@ impl SpeedApp {
         let Some(result) = self.result.clone() else {
             return;
         };
-        match HistoryStorage::new() {
+        match self.history_store() {
             Ok(store) => {
                 if let Err(e) = store.save_result(&result) {
                     self.status = format!("Failed to save history: {e}").into();
@@ -145,7 +158,7 @@ impl SpeedApp {
 
     /// Clear all saved history (and the on-screen list).
     pub fn clear_history(&mut self) {
-        if let Ok(store) = HistoryStorage::new() {
+        if let Ok(store) = self.history_store() {
             let _ = store.clear_history();
         }
         self.history.clear();
@@ -420,16 +433,14 @@ mod tests {
 
     #[test]
     fn completed_run_is_persisted_and_reloaded() {
-        // Point the config dir at a throwaway HOME so we don't touch real data.
+        // A throwaway history directory, so the test never touches real data.
         let tmp = std::env::temp_dir().join(format!("nr_gui_persist_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::env::set_var("HOME", &tmp);
-        std::env::set_var("XDG_CONFIG_HOME", tmp.join(".config"));
 
         let mut app = SpeedApp::new();
+        app.history_dir = Some(tmp.clone());
         app.reload_history();
-        assert_eq!(app.history.len(), 0, "fresh HOME should have empty history");
+        assert_eq!(app.history.len(), 0, "a fresh directory has no history");
 
         app.result = Some(netrunner_core::SpeedTestResult {
             loaded_latency_ms: None,

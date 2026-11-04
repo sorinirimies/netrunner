@@ -441,23 +441,6 @@ async fn test_continent_determination() {
 }
 
 #[tokio::test]
-async fn test_debug_mode_environment_variable() {
-    // Test that debug mode can be enabled via environment variable
-    // This doesn't test the actual output, just that the env var can be checked
-
-    // Without debug mode
-    assert!(std::env::var("NETRUNNER_DEBUG").is_err());
-
-    // Set debug mode
-    std::env::set_var("NETRUNNER_DEBUG", "1");
-    assert!(std::env::var("NETRUNNER_DEBUG").is_ok());
-
-    // Clean up
-    std::env::remove_var("NETRUNNER_DEBUG");
-    assert!(std::env::var("NETRUNNER_DEBUG").is_err());
-}
-
-#[tokio::test]
 async fn test_geolocation_service_names() {
     // Test that we know all the geolocation service names
     let services = vec![

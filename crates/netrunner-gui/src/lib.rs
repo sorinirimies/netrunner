@@ -9,6 +9,9 @@
 //! - [`view`] — the GPUI render implementation (charts, metrics)
 //! - [`theme`] — the cyberpunk colour palette
 
+// GPUI runs on macOS and Linux (see Cargo.toml).
+#![cfg(any(target_os = "macos", target_os = "linux"))]
+
 pub mod app;
 pub mod engine;
 pub mod theme;

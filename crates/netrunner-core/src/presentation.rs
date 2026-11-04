@@ -70,7 +70,7 @@ pub const fn quality_rgb(quality: crate::types::ConnectionQuality) -> (u8, u8, u
 macro_rules! quality_color_fn {
     (
         $(#[$meta:meta])*
-        $vis:vis fn $name:ident -> $Color:ty { $ctor:expr }
+        $vis:vis fn $name:ident -> $Color:ty { $ctor:expr_2021 }
     ) => {
         $(#[$meta])*
         $vis fn $name(quality: $crate::types::ConnectionQuality) -> $Color {

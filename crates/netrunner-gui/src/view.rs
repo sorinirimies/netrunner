@@ -1,6 +1,6 @@
 //! GPUI rendering for the netrunner desktop app.
 
-use gpui::{div, prelude::*, px, rgb, Context, Window};
+use gpui::{Context, Window, div, prelude::*, px, rgb};
 
 use crate::app::{Phase, SpeedApp};
 use crate::theme::*;
@@ -52,7 +52,7 @@ impl Render for SpeedApp {
 }
 
 impl SpeedApp {
-    fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn header(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let running = self.running;
         let auto_run = self.settings.auto_run;
         let button_label = if running {
@@ -125,7 +125,7 @@ impl SpeedApp {
             )
     }
 
-    fn status_bar(&self) -> impl IntoElement {
+    fn status_bar(&self) -> impl IntoElement + use<> {
         div()
             .flex()
             .flex_row()
@@ -147,7 +147,7 @@ impl SpeedApp {
             .child(div().text_color(rgb(TEXT)).child(self.status.to_string()))
     }
 
-    fn summary(&self) -> impl IntoElement {
+    fn summary(&self) -> impl IntoElement + use<> {
         let location = self
             .location
             .as_ref()
@@ -215,7 +215,7 @@ impl SpeedApp {
             )
     }
 
-    fn settings_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn settings_panel(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let s = &self.settings;
         let server_host = s
             .server_url
@@ -330,7 +330,7 @@ impl SpeedApp {
             )
     }
 
-    fn history_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn history_panel(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let has_history = !self.history.is_empty();
 
         let header = div()
@@ -438,7 +438,7 @@ fn chart_panel(
     samples: &[f32],
     color: gpui::Rgba,
     active: bool,
-) -> impl IntoElement {
+) -> impl IntoElement + use<> {
     let max = samples
         .iter()
         .copied()
@@ -496,7 +496,7 @@ fn chart_panel(
         )
 }
 
-fn metric(label: &str, value: String, color: gpui::Rgba) -> impl IntoElement {
+fn metric(label: &str, value: String, color: gpui::Rgba) -> impl IntoElement + use<> {
     div()
         .flex()
         .flex_col()
@@ -510,7 +510,7 @@ fn metric(label: &str, value: String, color: gpui::Rgba) -> impl IntoElement {
         .child(div().text_xl().text_color(color).child(value))
 }
 
-fn kv(label: &str, value: String) -> impl IntoElement {
+fn kv(label: &str, value: String) -> impl IntoElement + use<> {
     div()
         .flex()
         .flex_row()
@@ -550,7 +550,7 @@ fn setting_group(name: &str, controls: impl IntoElement) -> impl IntoElement {
 }
 
 /// A compact bar chart of a metric across past runs (oldest → newest).
-fn history_trend_chart(title: &str, values: &[f32], color: gpui::Rgba) -> impl IntoElement {
+fn history_trend_chart(title: &str, values: &[f32], color: gpui::Rgba) -> impl IntoElement + use<> {
     const H: f32 = 64.0;
     let max = values.iter().copied().fold(1.0_f32, f32::max).max(1.0);
     let latest = values.last().copied().unwrap_or(0.0);
@@ -597,7 +597,7 @@ fn history_trend_chart(title: &str, values: &[f32], color: gpui::Rgba) -> impl I
 }
 
 /// A single row in the history list: date, download, upload, ping, quality.
-fn history_row(r: &netrunner_core::SpeedTestResult) -> impl IntoElement {
+fn history_row(r: &netrunner_core::SpeedTestResult) -> impl IntoElement + use<> {
     let when = r.timestamp.format("%m-%d %H:%M").to_string();
     div()
         .flex()

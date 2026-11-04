@@ -4,8 +4,8 @@
 //! HTML escaping, [`TestEvent`] → JSON mapping for the server-sent-event stream, and the
 //! server-rendered dashboard page.
 
-use netrunner_core::{quality_rgb, Phase, SpeedTestResult, TestEvent};
-use serde_json::{json, Value};
+use netrunner_core::{Phase, SpeedTestResult, TestEvent, quality_rgb};
+use serde_json::{Value, json};
 
 /// Escape text for safe inclusion in HTML element content and quoted attribute values.
 pub fn escape_html(input: &str) -> String {

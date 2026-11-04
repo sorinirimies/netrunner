@@ -9,22 +9,22 @@
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Padding, Paragraph, Row, Table},
-    Terminal,
 };
 use std::io;
 use std::time::Duration;
 use tui_chart::{
     Axis, Gauge, LegendPosition as ChartLegend, LineChart, LineMode, Series, Sparkline,
 };
-use tui_piechart::{symbols, LegendAlignment, LegendLayout, LegendPosition, PieChart, PieSlice};
+use tui_piechart::{LegendAlignment, LegendLayout, LegendPosition, PieChart, PieSlice, symbols};
 
 use netrunner_core::{HistoryStorage, SpeedTestResult, TestStatistics};
 
@@ -124,6 +124,7 @@ impl View {
 }
 
 /// Application state for the statistics TUI
+#[derive(Debug)]
 pub(crate) struct StatsApp {
     view: View,
     stats: TestStatistics,
@@ -256,23 +257,23 @@ fn run_stats_loop(
         PAL.with(|p| p.set(Pal::of(&app.theme)));
         terminal.draw(|frame| render_stats(frame, app))?;
 
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => break,
-                    KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
-                        app.focus = app.focus.next();
-                    }
-                    KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
-                        app.focus = app.focus.prev();
-                    }
-                    KeyCode::Char('v') => app.view = app.view.toggle(),
-                    KeyCode::Char('t') => app.theme = app.theme.next(),
-                    KeyCode::Char('T') => app.theme = app.theme.prev(),
-                    KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
-                    KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
-                    _ => {}
+        if event::poll(Duration::from_millis(50))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => {
+                    app.focus = app.focus.next();
                 }
+                KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => {
+                    app.focus = app.focus.prev();
+                }
+                KeyCode::Char('v') => app.view = app.view.toggle(),
+                KeyCode::Char('t') => app.theme = app.theme.next(),
+                KeyCode::Char('T') => app.theme = app.theme.prev(),
+                KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
+                KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
+                _ => {}
             }
         }
     }
@@ -936,7 +937,7 @@ netrunner_core::quality_color_fn!(fn quality_color -> Color { Color::Rgb });
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
 
     fn app(n: usize) -> StatsApp {
         let results: Vec<SpeedTestResult> = (0..n)

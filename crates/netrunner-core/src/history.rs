@@ -10,7 +10,7 @@
 use chrono::{DateTime, Utc};
 use redb::{ReadableDatabase, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::types::SpeedTestResult;
 
@@ -59,35 +59,44 @@ impl Default for TestStatistics {
     }
 }
 
+#[derive(Debug)]
 pub struct HistoryStorage {
     db: redb::Database,
+    /// The database file, for [`HistoryStorage::get_db_stats`].
+    path: PathBuf,
 }
 
-#[allow(dead_code)]
 impl HistoryStorage {
-    /// Create a new history storage instance
+    /// Opens (or creates) the history database in the user's config directory.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let db_path = Self::get_db_path()?;
-        let db = redb::Database::create(db_path)?;
+        Self::open_in(&Self::default_dir()?)
+    }
 
-        Ok(Self { db })
+    /// Opens (or creates) the history database in `dir`, creating `dir` first.
+    pub fn open_in(dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let path = Self::db_path_in(dir)?;
+        let db = redb::Database::create(&path)?;
+        Ok(Self { db, path })
     }
 
     /// Create a new history storage instance with custom path (for testing)
     #[cfg(test)]
     fn new_with_path(path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
-        let db = redb::Database::create(path)?;
-        Ok(Self { db })
+        let db = redb::Database::create(&path)?;
+        Ok(Self { db, path })
     }
 
-    /// Get the database path
-    fn get_db_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let config_dir = dirs::config_dir()
+    /// `<config dir>/netrunner`.
+    fn default_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        Ok(dirs::config_dir()
             .ok_or("Failed to find config directory")?
-            .join("netrunner");
+            .join("netrunner"))
+    }
 
-        std::fs::create_dir_all(&config_dir)?;
-        let db_path = config_dir.join(DB_NAME);
+    /// The database file in `dir`.
+    fn db_path_in(dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        std::fs::create_dir_all(dir)?;
+        let db_path = dir.join(DB_NAME);
 
         // Migration guard: old (pre-redb) versions stored history in a *sled*
         // database, which is a DIRECTORY at this same path. redb needs a file,
@@ -505,14 +514,13 @@ impl HistoryStorage {
 
     /// Get database statistics
     pub fn get_db_stats(&self) -> Result<DbStats, Box<dyn std::error::Error>> {
-        let db_path = Self::get_db_path()?;
-        let size_on_disk = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
+        let size_on_disk = std::fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0);
         let results_count = self.count()?;
 
         Ok(DbStats {
             size_on_disk,
             results_count,
-            db_path: db_path.to_string_lossy().to_string(),
+            db_path: self.path.to_string_lossy().to_string(),
         })
     }
 
@@ -666,7 +674,6 @@ impl HistoryStorage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct DbStats {
     pub size_on_disk: u64,
     pub results_count: usize,
@@ -674,7 +681,6 @@ pub struct DbStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[allow(dead_code)]
 pub struct SpeedTrends {
     pub download_trend_percent: f64,
     pub upload_trend_percent: f64,
@@ -689,24 +695,29 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
+    fn stats_report_the_database_that_was_opened() {
+        let tmp = tempdir().expect("temp dir");
+        let store = HistoryStorage::open_in(tmp.path()).expect("open");
+        let stats = store.get_db_stats().expect("stats");
+        assert_eq!(stats.db_path, tmp.path().join(DB_NAME).to_string_lossy());
+        assert!(stats.size_on_disk > 0, "the opened file has a size");
+    }
+
+    #[test]
     fn migrates_over_stale_sled_directory() {
         // Old (pre-redb) installs left a sled DB *directory* at the redb path.
         // Opening must remove it and create a working redb file.
-        let tmp = std::env::temp_dir().join(format!("nr_sled_migrate_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::env::set_var("HOME", &tmp);
-        std::env::set_var("XDG_CONFIG_HOME", tmp.join(".config"));
+        let tmp = tempdir().expect("temp dir");
+        let cfg = tmp.path().join("netrunner");
 
         // Fabricate a stale sled-style directory at the DB path.
-        let cfg = dirs::config_dir().unwrap().join("netrunner");
-        std::fs::create_dir_all(&cfg).unwrap();
+        std::fs::create_dir_all(&cfg).expect("config dir");
         let stale = cfg.join(DB_NAME);
         std::fs::create_dir_all(stale.join("blobs")).unwrap();
         std::fs::write(stale.join("conf"), b"stale").unwrap();
         assert!(stale.is_dir(), "precondition: stale sled dir exists");
 
-        let store = HistoryStorage::new().expect("should open after migrating");
+        let store = HistoryStorage::open_in(&cfg).expect("should open after migrating");
         let r = SpeedTestResult {
             loaded_latency_ms: None,
             download_mbps: 42.0,
@@ -714,12 +725,7 @@ mod tests {
         };
         store.save_result(&r).unwrap();
         assert_eq!(store.get_recent_results(10).unwrap().len(), 1);
-        assert!(
-            HistoryStorage::get_db_path().unwrap().is_file(),
-            "redb path should now be a file"
-        );
-
-        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(stale.is_file(), "redb path should now be a file");
     }
 
     #[test]

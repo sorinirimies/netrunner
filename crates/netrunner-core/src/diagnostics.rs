@@ -10,11 +10,15 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::events::{emit, EventSender, TestEvent};
+use crate::events::{EventSender, TestEvent, emit};
 use crate::types::{NetworkDiagnostics, RouteHop, TestConfig};
 
+#[derive(Debug)]
 pub struct NetworkDiagnosticsTool {
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        reason = "the public constructors take a TestConfig; dropping it is a breaking change"
+    )]
     config: TestConfig,
     events: Option<EventSender>,
 }

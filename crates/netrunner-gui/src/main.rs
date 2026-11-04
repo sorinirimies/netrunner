@@ -1,11 +1,13 @@
-//! Desktop entry point for the netrunner GPUI app.
+//! Desktop entry point for the netrunner GPUI app (macOS and Linux).
 
-use gpui::{
-    px, size, App, AppContext, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions,
-};
-use netrunner_gui::SpeedApp;
-
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn main() {
+    use gpui::{
+        App, AppContext, Application, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px,
+        size,
+    };
+    use netrunner_gui::SpeedApp;
+
     // Install a rustls crypto provider for the whole process.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -33,7 +35,15 @@ fn main() {
                 app
             },
         )
-        .unwrap();
+        .expect("open the main window");
         cx.activate(true);
     });
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn main() {
+    eprintln!(
+        "netrunner: the desktop app runs on macOS and Linux. Use netrunner_cli (terminal) or netrunner-web (browser) here."
+    );
+    std::process::exit(1);
 }

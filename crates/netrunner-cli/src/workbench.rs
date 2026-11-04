@@ -20,21 +20,21 @@ use netrunner_core::{
     ConnectionQuality, HistoryStorage, Settings, SpeedTest, SpeedTestResult, TestEvent,
 };
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs},
-    Frame,
 };
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tui_checkbox::Checkbox;
-use tui_file_explorer::{render_themed, ExplorerOutcome, FileExplorer};
+use tui_file_explorer::{ExplorerOutcome, FileExplorer, render_themed};
 use tui_nuances::Theme;
 use tui_rating::Rating;
 use tui_slider::Slider;
 use tui_spinner::FluxSpinner;
 
-use crate::live::{draw_dashboard, LiveState};
+use crate::live::{LiveState, draw_dashboard};
 use crate::stats_ui::StatsApp;
 
 type Engine = Pin<Box<dyn Future<Output = Result<SpeedTestResult, String>>>>;
@@ -78,6 +78,7 @@ const ROWS: [Row; 4] = [
     Row::HistorySize,
 ];
 
+#[derive(Debug)]
 pub struct Workbench {
     tab: Tab,
     theme: Theme,
@@ -755,11 +756,10 @@ pub async fn run_workbench() -> io::Result<()> {
                 wb.live.tick += 1;
                 terminal.draw(|f| wb.draw(f))?;
                 while event::poll(Duration::ZERO)? {
-                    if let Event::Key(k) = event::read()? {
-                        if k.kind == KeyEventKind::Press && pending.is_none() {
+                    if let Event::Key(k) = event::read()?
+                        && k.kind == KeyEventKind::Press && pending.is_none() {
                             pending = wb.on_key(k);
                         }
-                    }
                 }
             }
         }
@@ -771,7 +771,7 @@ pub async fn run_workbench() -> io::Result<()> {
 mod tests {
     use super::*;
     use crossterm::event::{KeyEvent, KeyEventState};
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent {

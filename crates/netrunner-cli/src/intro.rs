@@ -1,19 +1,19 @@
-//! Animated intro screen with tachyonfx effects
+//! Animated intro screen
 //!
 //! Displays the Netrunner logo with cyberpunk glow animations when the app starts.
 
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
-    Terminal,
 };
 use std::io;
 use std::time::{Duration, Instant};
@@ -92,14 +92,14 @@ fn run_intro_animation(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) ->
         frame_count = frame_count.wrapping_add(1);
 
         // Check for input to skip
-        if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter | KeyCode::Char(' ') => {
-                        break;
-                    }
-                    _ => {}
+        if event::poll(Duration::from_millis(16))?
+            && let Event::Key(key) = event::read()?
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc | KeyCode::Enter | KeyCode::Char(' ') => {
+                    break;
                 }
+                _ => {}
             }
         }
 

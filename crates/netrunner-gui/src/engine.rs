@@ -6,7 +6,7 @@
 //! stream [`TestEvent`]s back over a `futures` channel that GPUI can poll from
 //! its foreground executor.
 
-use futures::channel::mpsc::{unbounded, UnboundedReceiver};
+use futures::channel::mpsc::{UnboundedReceiver, unbounded};
 use netrunner_core::{SpeedTest, TestConfig, TestEvent};
 
 /// Start a speed test on a background Tokio runtime.

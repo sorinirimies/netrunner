@@ -21,12 +21,12 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-use crate::events::{emit, EventSender, Phase, SelectedServer, TestEvent};
+use crate::events::{EventSender, Phase, SelectedServer, TestEvent, emit};
 use crate::types::{
     ConnectionQuality, ServerCapabilities, ServerProvider, SpeedTestResult, TestConfig, TestServer,
 };
@@ -69,7 +69,6 @@ pub struct GeoLocation {
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct ServerPerformance {
     pub server: TestServer,
     pub latency_ms: f64,
@@ -80,6 +79,7 @@ pub struct ServerPerformance {
     pub overall_score: f64,
 }
 
+#[derive(Debug)]
 pub struct SpeedTest {
     config: TestConfig,
     client: Client,
@@ -542,12 +542,12 @@ impl SpeedTest {
         // Speedtest.net uses a JSON API to get nearby servers
         let url = "https://www.speedtest.net/api/js/servers?engine=js&limit=10";
 
-        if let Ok(response) = self.client.get(url).send().await {
-            if let Ok(text) = response.text().await {
-                // Parse the response and create TestServer objects
-                if let Ok(servers) = self.parse_speedtest_servers(&text, geo) {
-                    return Ok(servers);
-                }
+        if let Ok(response) = self.client.get(url).send().await
+            && let Ok(text) = response.text().await
+        {
+            // Parse the response and create TestServer objects
+            if let Ok(servers) = self.parse_speedtest_servers(&text, geo) {
+                return Ok(servers);
             }
         }
 
@@ -566,41 +566,40 @@ impl SpeedTest {
         let mut servers = Vec::new();
 
         // Use serde_json to parse
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json) {
-            if let Some(array) = parsed.as_array() {
-                for server in array.iter().take(10) {
-                    if let (Some(host), Some(name), Some(country), Some(lat), Some(lon)) = (
-                        server.get("host").and_then(|v| v.as_str()),
-                        server.get("name").and_then(|v| v.as_str()),
-                        server.get("country").and_then(|v| v.as_str()),
-                        server.get("lat").and_then(|v| v.as_f64()),
-                        server.get("lon").and_then(|v| v.as_f64()),
-                    ) {
-                        let distance =
-                            self.calculate_distance(geo.latitude, geo.longitude, lat, lon);
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json)
+            && let Some(array) = parsed.as_array()
+        {
+            for server in array.iter().take(10) {
+                if let (Some(host), Some(name), Some(country), Some(lat), Some(lon)) = (
+                    server.get("host").and_then(|v| v.as_str()),
+                    server.get("name").and_then(|v| v.as_str()),
+                    server.get("country").and_then(|v| v.as_str()),
+                    server.get("lat").and_then(|v| v.as_f64()),
+                    server.get("lon").and_then(|v| v.as_f64()),
+                ) {
+                    let distance = self.calculate_distance(geo.latitude, geo.longitude, lat, lon);
 
-                        servers.push(TestServer {
-                            name: format!("{}, {}", name, country),
-                            url: format!("https://{}", host),
-                            location: format!("{}, {}", name, country),
-                            distance_km: Some(distance),
-                            latency_ms: None,
-                            provider: ServerProvider::Custom(
-                                host.split('.').next().unwrap_or("speedtest").to_string(),
-                            ),
-                            capabilities: ServerCapabilities {
-                                supports_download: true,
-                                supports_upload: true,
-                                supports_latency: true,
-                                max_test_size_mb: 1000,
-                                geographic_weight: 1.0,
-                            },
-                            quality_score: None,
-                            country_code: Some(country.to_string()),
-                            city: Some(name.to_string()),
-                            is_backup: false,
-                        });
-                    }
+                    servers.push(TestServer {
+                        name: format!("{}, {}", name, country),
+                        url: format!("https://{}", host),
+                        location: format!("{}, {}", name, country),
+                        distance_km: Some(distance),
+                        latency_ms: None,
+                        provider: ServerProvider::Custom(
+                            host.split('.').next().unwrap_or("speedtest").to_string(),
+                        ),
+                        capabilities: ServerCapabilities {
+                            supports_download: true,
+                            supports_upload: true,
+                            supports_latency: true,
+                            max_test_size_mb: 1000,
+                            geographic_weight: 1.0,
+                        },
+                        quality_score: None,
+                        country_code: Some(country.to_string()),
+                        city: Some(name.to_string()),
+                        is_backup: false,
+                    });
                 }
             }
         }
@@ -1003,10 +1002,10 @@ impl SpeedTest {
         // In production, use actual server coordinates
         let region = self.determine_region(&geo.country);
 
-        if let Some(city) = &server.city {
-            if city.contains(&geo.city) {
-                return 10.0; // Same city
-            }
+        if let Some(city) = &server.city
+            && city.contains(&geo.city)
+        {
+            return 10.0; // Same city
         }
 
         match (region.as_str(), server.location.as_str()) {
@@ -1041,21 +1040,21 @@ impl SpeedTest {
         }
 
         while let Some(result) = futures.next().await {
-            if let Ok(mut server) = result {
-                if let Some(latency) = server.latency_ms {
-                    let distance = server.distance_km.unwrap_or(1000.0);
-                    let geographic_weight = server.capabilities.geographic_weight;
+            if let Ok(mut server) = result
+                && let Some(latency) = server.latency_ms
+            {
+                let distance = server.distance_km.unwrap_or(1000.0);
+                let geographic_weight = server.capabilities.geographic_weight;
 
-                    // Calculate quality score considering latency, distance, and geographic weight
-                    // Lower latency and distance = higher score
-                    // Formula: base_score * geographic_weight / (latency_penalty + distance_penalty)
-                    let latency_penalty = latency.max(1.0); // Avoid division by near-zero
-                    let distance_penalty = (distance / 100.0).max(1.0);
-                    server.quality_score =
-                        Some((10000.0 * geographic_weight) / (latency_penalty + distance_penalty));
+                // Calculate quality score considering latency, distance, and geographic weight
+                // Lower latency and distance = higher score
+                // Formula: base_score * geographic_weight / (latency_penalty + distance_penalty)
+                let latency_penalty = latency.max(1.0); // Avoid division by near-zero
+                let distance_penalty = (distance / 100.0).max(1.0);
+                server.quality_score =
+                    Some((10000.0 * geographic_weight) / (latency_penalty + distance_penalty));
 
-                    test_results.push(server);
-                }
+                test_results.push(server);
             }
         }
 
@@ -1376,21 +1375,19 @@ impl SpeedTest {
             .timeout(Duration::from_secs(3))
             .send()
             .await
+            && let Ok(json) = response.json::<serde_json::Value>().await
         {
-            if let Ok(json) = response.json::<serde_json::Value>().await {
-                return json["ip"].as_str().and_then(|s| s.parse::<IpAddr>().ok());
-            }
+            return json["ip"].as_str().and_then(|s| s.parse::<IpAddr>().ok());
         }
         None
     }
 
     async fn resolve_server_ip(&self, url: &str) -> Option<IpAddr> {
-        if let Ok(parsed) = url.parse::<reqwest::Url>() {
-            if let Some(host) = parsed.host_str() {
-                if let Ok(addrs) = tokio::net::lookup_host(format!("{}:443", host)).await {
-                    return addrs.into_iter().next().map(|addr| addr.ip());
-                }
-            }
+        if let Ok(parsed) = url.parse::<reqwest::Url>()
+            && let Some(host) = parsed.host_str()
+            && let Ok(addrs) = tokio::net::lookup_host(format!("{}:443", host)).await
+        {
+            return addrs.into_iter().next().map(|addr| addr.ip());
         }
         None
     }

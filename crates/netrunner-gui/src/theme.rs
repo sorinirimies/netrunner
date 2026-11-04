@@ -1,6 +1,6 @@
 //! Cyberpunk colour palette for the GPUI desktop app, mirroring the TUI theme.
 
-use gpui::{rgb, Rgba};
+use gpui::{Rgba, rgb};
 
 pub const BG: u32 = 0x0a0a14;
 pub const PANEL_BG: u32 = 0x12121f;

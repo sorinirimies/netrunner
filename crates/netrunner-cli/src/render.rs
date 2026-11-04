@@ -245,7 +245,7 @@ fn render_diag_event(event: TestEvent) {
 
 /// Render the final network-diagnostics table.
 fn display_diagnostics(d: &NetworkDiagnostics) {
-    use prettytable::{format, Cell, Row, Table};
+    use prettytable::{Cell, Row, Table, format};
 
     println!();
     println!(

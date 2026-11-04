@@ -16,11 +16,11 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use netrunner_core::{Phase, SpeedTest, SpeedTestResult, TestConfig, TestEvent};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 use tokio::sync::mpsc;
 use tui_chart::{Axis, Gauge, LegendPosition, LineChart, LineMode, Series, Sparkline};
@@ -440,12 +440,11 @@ pub async fn run_speed_test_live(
             terminal.draw(|f| draw(f, &state))?;
             // Keep the finished chart on screen until a key is pressed.
             loop {
-                if event::poll(Duration::from_millis(100))? {
-                    if let Event::Key(k) = event::read()? {
-                        if k.kind == KeyEventKind::Press {
-                            break;
-                        }
-                    }
+                if event::poll(Duration::from_millis(100))?
+                    && let Event::Key(k) = event::read()?
+                    && k.kind == KeyEventKind::Press
+                {
+                    break;
                 }
                 state.tick += 1;
                 terminal.draw(|f| draw(f, &state))?;
@@ -464,7 +463,7 @@ pub async fn run_speed_test_live(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::{backend::TestBackend, Terminal};
+    use ratatui::{Terminal, backend::TestBackend};
 
     fn render(state: &LiveState, w: u16, h: u16) -> String {
         let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();

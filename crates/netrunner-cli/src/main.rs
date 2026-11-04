@@ -1,14 +1,15 @@
-use clap::{value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use colored::*;
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::{Select, theme::ColorfulTheme};
 
 use std::io::{self, Write};
 use std::time::Duration;
 use tokio::signal;
 
 use netrunner_cli::{
+    UI,
     render::{run_diagnostics_tui, run_speed_test_tui},
-    show_intro, show_simple_intro, show_statistics_tui, UI,
+    show_intro, show_simple_intro, show_statistics_tui,
 };
 use netrunner_core::{DetailLevel, HistoryStorage, NetworkDiagnosticsTool, SpeedTest, TestConfig};
 
@@ -114,13 +115,24 @@ async fn run_app() -> Result<(), Box<dyn std::error::Error>> {
         )
         .get_matches();
 
-    let server_url = matches.get_one::<String>("server").unwrap().clone();
-    let test_size_mb = *matches.get_one::<u64>("size").unwrap();
-    let timeout_seconds = *matches.get_one::<u64>("timeout").unwrap();
+    let server_url = matches
+        .get_one::<String>("server")
+        .expect("--server has a default")
+        .clone();
+    let test_size_mb = *matches
+        .get_one::<u64>("size")
+        .expect("--size has a default");
+    let timeout_seconds = *matches
+        .get_one::<u64>("timeout")
+        .expect("--timeout has a default");
     let json_output = matches.get_flag("json");
     let animation_enabled = !matches.get_flag("no-animation");
 
-    let detail_level = match matches.get_one::<String>("detail").unwrap().as_str() {
+    let detail_level = match matches
+        .get_one::<String>("detail")
+        .expect("--detail has a default")
+        .as_str()
+    {
         "basic" => DetailLevel::Basic,
         "detailed" => DetailLevel::Detailed,
         "debug" => DetailLevel::Debug,
@@ -175,7 +187,9 @@ async fn run_app() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Parse command line mode or show interactive menu
-    let mode = matches.get_one::<String>("mode").unwrap();
+    let mode = matches
+        .get_one::<String>("mode")
+        .expect("--mode has a default");
     match mode.as_str() {
         "speed" => run_speed_test(&config).await?,
         "diag" => run_diagnostics(&config).await?,

@@ -2,7 +2,7 @@
 
 Output "examples/vhs/target/statistics-dashboard.gif"
 
-Set Shell "bash"
+Set Shell "nu"
 Set FontSize 13
 Set Width 1400
 Set Height 900
@@ -11,7 +11,7 @@ Set Theme "Catppuccin Mocha"
 
 # Build silently so the recording skips compilation
 Hide
-Type "cargo build --release --example statistics_dashboard 2>&1"
+Type "cargo build --release --example statistics_dashboard"
 Enter
 Sleep 30s
 Type "clear"

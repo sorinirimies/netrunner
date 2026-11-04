@@ -12,14 +12,13 @@ use std::time::Duration;
 use netrunner_core::TestConfig;
 
 // Bandwidth monitor state for real-time graph
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct BandwidthMonitor {
     pub speed_history: Arc<RwLock<Vec<f64>>>,
     pub current_speed: Arc<RwLock<f64>>,
     pub peak_speed: Arc<RwLock<f64>>,
     pub is_final: Arc<RwLock<bool>>,
     pub throbber_frame: Arc<RwLock<usize>>,
-    #[allow(dead_code)]
     pub title: String,
     pub label: String,
 }
@@ -225,6 +224,7 @@ impl BandwidthMonitor {
     }
 }
 
+#[derive(Debug)]
 pub struct UI {
     term: Term,
     multi_progress: MultiProgress,
@@ -284,7 +284,7 @@ impl UI {
                 .template(
                     "{spinner:.green} {msg} [{bar:40.cyan/blue}] {percent}% [{elapsed_precise}]",
                 )
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .progress_chars("━━╸─"),
         );
         pb.set_message(message.to_string());
@@ -296,7 +296,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_cyan} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -309,7 +309,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_green} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -322,7 +322,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_blue} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -335,7 +335,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_magenta} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -348,7 +348,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_green} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -361,7 +361,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_cyan} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -374,7 +374,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_green} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -387,7 +387,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_yellow} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -400,7 +400,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_cyan} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -413,7 +413,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_yellow} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());
@@ -426,7 +426,7 @@ impl UI {
         pb.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.bright_yellow} {msg}")
-                .unwrap()
+                .expect("a fixed, valid progress template")
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
         );
         pb.set_message(message.to_string());

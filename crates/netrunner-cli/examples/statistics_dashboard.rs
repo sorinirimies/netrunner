@@ -48,7 +48,7 @@
 //! - No network access is required to run this example.
 
 use chrono::{Duration, Utc};
-use netrunner_cli::{show_statistics_tui, ConnectionQuality, HistoryStorage, SpeedTestResult};
+use netrunner_cli::{ConnectionQuality, HistoryStorage, SpeedTestResult, show_statistics_tui};
 
 // ---------------------------------------------------------------------------
 // Seed data — 20 hand-crafted entries spread over the last 30 days.

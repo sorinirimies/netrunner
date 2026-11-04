@@ -12,7 +12,6 @@ use ratatui::{
 
 /// Size variants for the Netrunner logo
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(dead_code)]
 pub enum NetrunnerLogoSize {
     /// Tiny logo (3 lines high)
     Tiny,

@@ -2,7 +2,7 @@
 
 Output "examples/vhs/target/speed-test.gif"
 
-Set Shell "bash"
+Set Shell "nu"
 Set FontSize 14
 Set Width 1200
 Set Height 800
@@ -11,7 +11,7 @@ Set Theme "Catppuccin Mocha"
 
 # Build silently so the recording skips compilation
 Hide
-Type "cargo build --release 2>&1"
+Type "cargo build --release"
 Enter
 Sleep 30s
 Type "clear"

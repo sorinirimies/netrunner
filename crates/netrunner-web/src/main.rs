@@ -6,14 +6,15 @@ use futures::{Stream, StreamExt};
 use netrunner_core::{HistoryStorage, SpeedTest, SpeedTestResult, TestConfig, TestEvent};
 use netrunner_web::{event_json, render_index};
 use topcoat::{
-    router::{
-        content::{
-            sse::{Event, KeepAlive, Sse},
-            Html, Json,
-        },
-        route, Router, RouterBuilderDiscoverExt,
-    },
     Result,
+    router::{
+        Router, RouterBuilderDiscoverExt,
+        content::{
+            Html, Json,
+            sse::{Event, KeepAlive, Sse},
+        },
+        route,
+    },
 };
 
 /// Only one speed test may run at a time: concurrent tests would skew each other.
@@ -82,14 +83,12 @@ async fn run() -> Result<Sse<impl Stream<Item = Result<Event>> + use<>>> {
                     biased;
                     ev = core_rx.recv() => match ev {
                         Some(ev) => {
-                            if let TestEvent::Completed(result) = &ev {
-                                if let Ok(store) = HistoryStorage::new() {
+                            if let TestEvent::Completed(result) = &ev
+                                && let Ok(store) = HistoryStorage::new() {
                                     let _ = store.save_result(result);
                                 }
-                            }
-                            if let Some(out) = event_json(&ev) {
-                                if tx.send(out).is_err() { return; } // client went away
-                            }
+                            if let Some(out) = event_json(&ev)
+                                && tx.send(out).is_err() { return; } // client went away
                         }
                         None => break,
                     },
