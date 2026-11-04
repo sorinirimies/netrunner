@@ -1,18 +1,22 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Auto-merge — merge Dependabot PRs (patch, minor AND major) once CI succeeds
+# Auto-merge — automatically approve and merge Dependabot PRs
 # ──────────────────────────────────────────────────────────────────────────────
-# No branch protection is needed: this runs after the CI workflow completes and
-# only merges when CI concluded successfully.
+# Dependabot is configured for GitHub Actions only (see .github/dependabot.yml).
+# Cargo dependency upgrades are handled by the Nightly Dependency Upgrade
+# workflow on Gitea.
 #
-# Requirements: none beyond Actions having write permission (set below).
+# If CI passes, patch and minor Action bumps are approved and merged
+# automatically so they don't pile up.  Major bumps require manual review.
+#
+# Requirements:
+#   • The repo must have "Allow auto-merge" enabled in Settings → General.
+#   • Branch protection rules must require status checks to pass before merging.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Auto-merge Dependabot
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  pull_request:
 
 permissions:
   contents: write
@@ -22,20 +26,26 @@ jobs:
   auto-merge:
     name: Auto-merge
     runs-on: ubuntu-latest
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    if: github.actor == 'dependabot[bot]'
     steps:
-      - name: Merge PR (squash)
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Only auto-merge patch and minor updates.
+      # Major version bumps require manual review.
+      - name: Approve PR
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr review --approve "$PR_URL"
         env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,headRefOid \
-            --jq ".[] | select(.headRefOid==\"$SHA\") | .number" | head -n1)
-          if [ -z "$pr" ]; then echo "No open PR for $BRANCH@$SHA (stale run); skipping."; exit 0; fi
-          gh pr review --repo "$REPO" --approve "$pr" || true
-          gh pr merge --repo "$REPO" --squash "$pr"
+
+      - name: Enable auto-merge (squash)
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

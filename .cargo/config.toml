@@ -1,17 +1,8 @@
-# Note: It's recommended to use `cargo login` instead of storing your token here
-# You can run: cargo login your-crates-io-token
-# This will store your token securely in ~/.cargo/credentials.toml
-#
-# [registries]
-# [registries.crates-io]
-# token = "your-token-goes-here"
+# Keep debug builds small: full debuginfo grows target/ past 10 GB on GUI-sized
+# workspaces. Line tables are enough for backtraces; set
+# CARGO_PROFILE_DEV_DEBUG=2 when you need to step through code in a debugger.
+[profile.dev]
+debug = "line-tables-only"
 
-# Silence certain lints for dependencies when running clippy
-[build]
-rustflags = [
-    "--cfg", "tokio_unstable",
-]
-
-# Allow unstable features in the nightly toolchain
-[unstable]
-all-features = true
+[profile.dev.package."*"]
+debug = false

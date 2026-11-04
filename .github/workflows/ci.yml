@@ -3,123 +3,98 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - master
-      - develop
+    branches: [main, master, develop]
+  workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: Also test on macOS and Windows (automatic on public repos)
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
 
-# ensure that the workflow is only triggered once per PR, subsequent pushes to the PR will cancel
-# and restart the workflow. See https://docs.github.com/en/actions/using-jobs/using-concurrency
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  fmt:
-    name: fmt
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: check formatting
-        run: cargo fmt -- --check
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-  clippy:
-    name: clippy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-      # The GPUI desktop crate (`netrunner`) needs a graphical toolchain that is
-      # not available on the headless Linux runner; it is linted/tested on macOS.
-      - name: Run clippy (core + CLI)
-        run: cargo clippy --workspace --exclude netrunner --all-targets --all-features -- -D warnings -A deprecated
-  doc:
-    # run docs generation on nightly rather than stable. This enables features like
-    # https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html which allows an
-    # API be documented as only available in some specific platforms.
-    name: doc
+  # fmt + clippy + tests + versions + nu tests —
+  # the same script `just check-all` runs.
+  gate:
+    name: quality gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Run cargo doc
-        run: cargo doc --no-deps --all-features --workspace --exclude netrunner
-        env:
-          RUSTDOCFLAGS: --cfg docsrs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      - name: Quality gate
+        run: nu scripts/ci/quality_gate.nu
+
+  # The binary ships for all three systems: paths, line endings and process
+  # handling differ there.
   test:
+    name: test (${{ matrix.os }})
+    # A private repo pays 10x for macOS and 2x for Windows minutes: there this
+    # runs only when dispatched with full_matrix.
+    if: ${{ !github.event.repository.private || inputs.full_matrix }}
     runs-on: ${{ matrix.os }}
-    name: test ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-    steps:
-      # if your project needs OpenSSL, uncomment this to fix Windows builds.
-      # it's commented out by default as the install command takes 5-10m.
-      # - run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
-      #   if: runner.os == 'Windows'
-      # - run: vcpkg install openssl:x64-windows-static-md
-      #   if: runner.os == 'Windows'
-      - uses: actions/checkout@v7
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      # enable this ci template to run regardless of whether the lockfile is checked in or not
-      - name: cargo generate-lockfile
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: cargo test --locked (core + CLI)
-        run: cargo test --locked --all-features --workspace --exclude netrunner --all-targets
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-
-  test-gui:
-    # The GPUI desktop app builds natively on macOS (Metal); its pure state
-    # machine is unit-tested here without opening a window.
-    name: test-gui (macos)
-    runs-on: macos-latest
+        os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-      - name: cargo test -p netrunner
-        run: cargo test --locked -p netrunner
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo test --workspace
+        run: cargo test --workspace --all-features
 
-  test-nu:
-    name: test-nu
+  # The Linux release binaries are static musl ones (any distro); skipped when
+  # scripts/project.nu sets LINUX to "gnu".
+  musl:
+    name: musl (static)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-      - name: Generate lockfile (if absent)
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: Install Nushell
-        uses: hustcer/setup-nu@v3
+      - name: Install musl tools
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends musl-tools
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          version: "*"
-      - name: Run Nu script tests
-        run: nu scripts/tests/run_all.nu
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      - name: Build, statically linked and runs
+        run: nu scripts/ci/check_static.nu x86_64-unknown-linux-musl --build
+
+  msrv:
+    name: MSRV (1.90)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # @master + toolchain, not @1.90: Dependabot would bump a version ref.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.90"
+      - uses: Swatinem/rust-cache@v2
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      # netrunner-web is left out: it needs Rust 1.98 (Topcoat).
+      - name: cargo check
+        run: cargo check --workspace --exclude netrunner-web --locked

@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "0 3 * * *"
   push:
-    branches: [main, master]
+    branches: [main]
     paths: ["Cargo.lock", "Cargo.toml", "**/Cargo.toml", ".cargo/audit.toml", "deny.toml", "fuzz/**"]
   pull_request:
     paths: ["Cargo.lock", "Cargo.toml", "**/Cargo.toml", ".cargo/audit.toml", "deny.toml", "fuzz/**"]
@@ -19,9 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-audit
+      - name: Install Rust stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
       - name: Audit dependencies
         run: cargo audit
 
@@ -30,8 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-deny
+      - name: Install Rust stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
       - name: Check advisories, licenses, bans, sources
         run: cargo deny check

@@ -1,20 +1,18 @@
 #!/usr/bin/env nu
-# Shared test runner for netrunner's Nu script tests.
+# Shared test runner for Nu script tests.
 #
 # Usage in a test file:
 #   use runner.nu *
-#   def "test <name>" [] { ... }
 #   def main [] { run-tests }
-#
-# Discovers every custom command named "test *" in the calling file, runs each
-# in isolation, prints a summary, and exits non-zero if any test fails.
 
+# Run all commands in the current file whose name starts with "test ".
+# Prints a summary and exits 1 if any test failed.
 export def run-tests [] {
-    let green = (ansi green)
-    let red = (ansi red)
-    let bold = (ansi --escape {attr: b})
-    let cyan = (ansi cyan)
-    let reset = (ansi reset)
+    let green  = (ansi green)
+    let red    = (ansi red)
+    let bold   = (ansi --escape {attr: b})
+    let cyan   = (ansi cyan)
+    let reset  = (ansi reset)
 
     let tests = (
         scope commands
@@ -28,24 +26,26 @@ export def run-tests [] {
     let total = ($tests | length)
 
     if $total == 0 {
-        print $"($red)No tests found.($reset)"
+        print $"($red)No tests found.(ansi reset)"
         exit 1
     }
 
-    mut passed = 0
-    mut failed = 0
+    mut passed  = 0
+    mut failed  = 0
     mut failures = []
 
     for test in $tests {
         print -n $"  ($cyan)($test)($reset) ... "
-        let res = (do { nu --commands $"source '($env.CURRENT_FILE)'; ($test)" } | complete)
+        let res = (do {
+            nu --commands $"source '($env.CURRENT_FILE)'; ($test)"
+        } | complete)
 
         if $res.exit_code == 0 {
             print $"($green)ok($reset)"
             $passed = $passed + 1
         } else {
             print $"($red)FAILED($reset)"
-            $failed = $failed + 1
+            $failed  = $failed + 1
             $failures = ($failures | append { test: $test, output: $res.stderr })
         }
     }

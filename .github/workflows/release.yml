@@ -1,54 +1,56 @@
 name: Release
 
+# Push a vX.Y.Z tag (`just release X.Y.Z`): validate tag == Cargo.toml → gate →
+# build the binaries in scripts/project.nu for macOS (arm64, x86-64), Linux
+# (static musl arm64, x86-64) and Windows → GitHub release with the archives +
+# sha256 and git-cliff notes → crates.io, every crate in scripts/project.nu (only
+# if the CRATES_IO_TOKEN secret is set; idempotent).
+
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v1.0.0)"
+        description: "Tag to release (e.g. v0.2.0)"
         required: true
-        default: ""
 
 permissions:
   contents: write
 
 concurrency:
   group: release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # ── 0. Validate & resolve the tag ─────────────────────────────────────────────
   validate:
     name: Validate tag
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.resolve.outputs.tag }}
-      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+      matrix: ${{ steps.m.outputs.matrix }}
     steps:
-      - name: Resolve and validate tag
-        id: resolve
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG="${{ github.ref_name }}"
-          fi
-          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "❌ Tag '${TAG}' does not match vX.Y.Z — aborting."
-            exit 1
-          fi
-          echo "tag=${TAG}"           >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}"     >> "$GITHUB_OUTPUT"
-          echo "Releasing ${TAG}"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Validate tag
+        id: v
+        run: nu scripts/ci/validate_tag.nu "${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: Versions match the tag
+        run: nu scripts/ci/check_versions.nu "${{ steps.v.outputs.tag }}"
+      - name: Build matrix
+        id: m
+        run: nu scripts/project.nu matrix >> "$GITHUB_OUTPUT"
 
-  # ── 1. Quality gate (headless: core + CLI, no GPUI) ───────────────────────────
-  test:
-    name: Test & lint
+  gate:
+    name: Quality gate
     needs: validate
     runs-on: ubuntu-latest
     steps:
@@ -57,65 +59,105 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Clippy (core + CLI)
-        run: cargo clippy --workspace --exclude netrunner --all-targets -- -D warnings -A deprecated
-      - name: Test (core + CLI)
-        run: cargo test --all-features --workspace --exclude netrunner
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      - run: nu scripts/ci/quality_gate.nu
 
-  # ── 2. Build the CLI binary & create the GitHub Release ───────────────────────
   build:
-    name: Build & GitHub Release
-    needs: [validate, test]
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.target }}
+    needs: [validate, gate]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      # release_matrix in scripts/project.nu: the targets for its LINUX flavour.
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.validate.outputs.tag }}
-          fetch-depth: 0
-
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install Nushell
-        uses: hustcer/setup-nu@v3
         with:
-          version: "*"
-
-      - name: Install git-cliff
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      # Static Linux binaries for both architectures from one runner: zig is the
+      # C cross-compiler for any bundled C code (sqlite, zstd, …).
+      - name: Install zig
+        if: matrix.zig
+        uses: mlugg/setup-zig@v2
+      - name: Install cargo-zigbuild
+        if: matrix.zig
         uses: taiki-e/install-action@v2
         with:
-          tool: git-cliff
-
-      - name: Prepare release notes
-        run: nu scripts/release_prepare.nu ${{ needs.validate.outputs.tag }}
-
-      - name: Build release binary (CLI)
-        run: cargo build --release -p netrunner_cli
-
-      - name: Package binary (Linux)
-        run: tar -C target/release -czvf netrunner_cli-${{ needs.validate.outputs.tag }}-linux-x86_64.tar.gz netrunner_cli
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+          tool: cargo-zigbuild
+      - name: Build (zig)
+        if: matrix.zig
+        run: nu scripts/ci/build_release.nu ${{ matrix.target }} --zig
+      - name: Build
+        if: ${{ !matrix.zig }}
+        run: nu scripts/ci/build_release.nu ${{ matrix.target }}
+      - name: Package
+        run: nu scripts/ci/package.nu ${{ matrix.target }} --out dist
+      - uses: actions/upload-artifact@v7
         with:
-          tag_name: ${{ needs.validate.outputs.tag }}
-          body_path: RELEASE_NOTES.md
-          files: |
-            netrunner_cli-${{ needs.validate.outputs.tag }}-linux-x86_64.tar.gz
-            LICENSE
-            README.md
-            CHANGELOG.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: dist-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
 
-  # ── 2b. macOS universal (GUI + CLI) and Windows CLI ───────────────────────────
-  macos:
-    name: macOS universal (GUI + CLI)
-    needs: [validate, build]
+  # .deb, .rpm and AppImages, built on the OLDEST hosted runners: a binary needs
+  # at least the glibc it was linked against (22.04 = 2.35).
+  linux-packages:
+    name: Linux packages ${{ matrix.target }}
+    needs: [validate, gate]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: desktop-${{ matrix.target }}
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      - name: Install packaging tools
+        run: nu scripts/ci/package_desktop.nu tools linux
+      - name: Build
+        run: nu scripts/ci/build_release.nu ${{ matrix.target }}
+      - name: .deb, .rpm and AppImage
+        run: nu scripts/ci/package_desktop.nu linux ${{ needs.validate.outputs.version }} ${{ matrix.target }} --appimage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.target }}
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+          if-no-files-found: error
+
+  macos-dmg:
+    name: macOS universal DMG
+    needs: [validate, gate]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -125,26 +167,24 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
-      - name: Install Nushell
-        uses: hustcer/setup-nu@v3
+      - uses: hustcer/setup-nu@v3
         with:
-          version: "*"
-
-      - name: Package DMG
-        run: nu scripts/ci/package_macos.nu ${{ needs.validate.outputs.tag }} --build
-      - name: Upload to release
-        uses: softprops/action-gh-release@v3
+          version: "0.116.1"
+      - name: Build arm64
+        run: nu scripts/ci/build_release.nu aarch64-apple-darwin
+      - name: Build x86_64
+        run: nu scripts/ci/build_release.nu x86_64-apple-darwin
+      - name: DMG
+        run: nu scripts/ci/package_desktop.nu macos ${{ needs.validate.outputs.version }}
+      - uses: actions/upload-artifact@v7
         with:
-          tag_name: ${{ needs.validate.outputs.tag }}
-          files: |
-            dist/*.dmg
-            dist/*.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: desktop-macos
+          path: dist/*.dmg
+          if-no-files-found: error
 
-  windows:
-    name: Windows CLI (installer + zip)
-    needs: [validate, build]
+  windows-installer:
+    name: Windows installer
+    needs: [validate, gate]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -152,102 +192,91 @@ jobs:
           ref: ${{ needs.validate.outputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Install Nushell
-        uses: hustcer/setup-nu@v3
+      - uses: hustcer/setup-nu@v3
         with:
-          version: "*"
+          version: "0.116.1"
+      - name: Install NSIS
+        run: nu scripts/ci/package_desktop.nu tools windows
+      - name: Build
+        run: nu scripts/ci/build_release.nu x86_64-pc-windows-msvc
+      - name: Installer
+        run: nu scripts/ci/package_desktop.nu windows ${{ needs.validate.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-windows
+          path: dist/*-setup.exe
+          if-no-files-found: error
 
-      - name: Build CLI
-        run: cargo build --release -p netrunner_cli
-      - name: Build installer (NSIS)
-        run: |
-          choco install nsis -y --no-progress
-          nu scripts/ci/package_windows.nu ${{ needs.validate.outputs.tag }} target/release
-      - name: Upload to release
-        uses: softprops/action-gh-release@v3
+  publish:
+    name: GitHub release
+    needs: [validate, build, linux-packages, macos-dmg, windows-installer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          fetch-depth: 0
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Release notes
+        run: nu scripts/ci/release_notes.nu ${{ needs.validate.outputs.tag }}
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.validate.outputs.tag }}
-          files: |
-            dist/*-setup.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: NetRunner ${{ needs.validate.outputs.version }}
+          body_path: RELEASE_NOTES.md
+          files: dist/*
 
-  # ── 3. Publish core + CLI to crates.io (headless, dependency order) ───────────
-  publish:
-    name: Publish core + CLI
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    env:
-      HAS_TOKEN: ${{ secrets.CRATES_IO_TOKEN != '' }}
-    steps:
-      - name: Skip (no token)
-        if: env.HAS_TOKEN != 'true'
-        run: echo "⏭️  CRATES_IO_TOKEN not set — skipping crates.io publish."
-
-      - uses: actions/checkout@v7
-        if: env.HAS_TOKEN == 'true'
-        with:
-          ref: ${{ needs.validate.outputs.tag }}
-      - uses: dtolnay/rust-toolchain@stable
-        if: env.HAS_TOKEN == 'true'
-      - uses: Swatinem/rust-cache@v2
-        if: env.HAS_TOKEN == 'true'
-
-      - name: Publish netrunner-core
-        if: env.HAS_TOKEN == 'true'
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          V="${{ needs.validate.outputs.version }}"
-          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner-core/$V" >/dev/null 2>&1; then
-            echo "⏭️  netrunner-core@$V already on crates.io."
-          else
-            cargo publish -p netrunner-core
-            echo "⏳ Waiting for the index to propagate…"
-            sleep 45
-          fi
-
-      - name: Publish netrunner_cli
-        if: env.HAS_TOKEN == 'true'
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          V="${{ needs.validate.outputs.version }}"
-          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner_cli/$V" >/dev/null 2>&1; then
-            echo "⏭️  netrunner_cli@$V already on crates.io."
-          else
-            cargo publish -p netrunner_cli
-          fi
-
-  # ── 4. Publish the GPUI desktop app (macOS — gpui builds natively there) ──────
-  publish-gui:
-    name: Publish GUI (macOS)
+  crates-io:
+    name: crates.io
     needs: [validate, publish]
-    runs-on: macos-latest
-    env:
-      HAS_TOKEN: ${{ secrets.CRATES_IO_TOKEN != '' }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Skip (no token)
-        if: env.HAS_TOKEN != 'true'
-        run: echo "⏭️  CRATES_IO_TOKEN not set — skipping GUI publish."
-
       - uses: actions/checkout@v7
-        if: env.HAS_TOKEN == 'true'
         with:
           ref: ${{ needs.validate.outputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
-        if: env.HAS_TOKEN == 'true'
-      - uses: Swatinem/rust-cache@v2
-        if: env.HAS_TOKEN == 'true'
-
-      - name: Publish netrunner (GUI)
-        if: env.HAS_TOKEN == 'true'
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: Install system packages
+        run: nu scripts/ci/apt.nu
+      # Every crate in scripts/project.nu, dependencies first.
+      - name: Publish crates (idempotent)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: |
-          V="${{ needs.validate.outputs.version }}"
-          if curl -sf -H "User-Agent: netrunner-release" "https://crates.io/api/v1/crates/netrunner/$V" >/dev/null 2>&1; then
-            echo "⏭️  netrunner@$V already on crates.io."
-          else
-            cargo publish -p netrunner
-          fi
+        run: nu scripts/ci/publish_crate.nu
+
+  # Needs the AUR_USERNAME, AUR_EMAIL and AUR_SSH_PRIVATE_KEY secrets; without
+  # them the deploy fails without failing the release.
+  aur:
+    name: AUR
+    needs: [validate, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+      - uses: hustcer/setup-nu@v3
+        with:
+          version: "0.116.1"
+      - name: PKGBUILD for this version
+        run: nu scripts/ci/package_desktop.nu aur ${{ needs.validate.outputs.version }}
+      - name: Deploy to the AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3
+        continue-on-error: true
+        with:
+          pkgname: netrunner
+          pkgbuild: dist/aur/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: Update to v${{ needs.validate.outputs.version }}
