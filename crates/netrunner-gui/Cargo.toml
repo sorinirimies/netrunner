@@ -28,6 +28,8 @@ tokio = { workspace = true }
 rustls = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+# Cargo.lock holds libc at 0.2.189: gpui 0.2.2 reaches xattr 0.2.3 (through zed-async-tar),
+# which uses libc::ENOATTR, gone from Linux since libc 0.2.190.
 gpui = { workspace = true }
 
 [lints]
