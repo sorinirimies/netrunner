@@ -28,9 +28,17 @@ tokio = { workspace = true }
 rustls = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
-# Cargo.lock holds libc at 0.2.189: gpui 0.2.2 reaches xattr 0.2.3 (through zed-async-tar),
-# which uses libc::ENOATTR, gone from Linux since libc 0.2.190.
 gpui = { workspace = true }
+
+# gpui 0.2.2 reaches xattr 0.2.3 (through zed-async-tar), which uses libc::ENOATTR,
+# gone from Linux since libc 0.2.190. The exact requirement holds libc there through
+# the nightly cargo update; a lockfile-only hold did not.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "=0.2.189"
+
+[package.metadata.cargo-machete]
+# libc is only the version hold above; no code uses it.
+ignored = ["libc"]
 
 [lints]
 workspace = true
