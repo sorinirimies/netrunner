@@ -7,6 +7,7 @@ ignore = [
     "RUSTSEC-2025-0052", # async-std discontinued
     "RUSTSEC-2025-0134", # rustls-pemfile unmaintained
     "RUSTSEC-2024-0384", # instant unmaintained
+    "RUSTSEC-2026-0441", # pin-utils unmaintained (through async-std)
     # Text and SVG rendering (cosmic-text, fontdb, usvg/resvg).
     "RUSTSEC-2026-0192", # ttf-parser unmaintained
     "RUSTSEC-2026-0206", # rustybuzz unmaintained
