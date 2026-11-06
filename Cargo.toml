@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2.0.5"
+version = "2.0.6"
 edition = "2024"
 rust-version = "1.90"
 authors = ["Sorin Albu-Irimies <mihaiirimies@gmail.com>"]
@@ -60,7 +60,7 @@ gpui = "0.2"
 topcoat = { version = "0.10", features = ["sse"] }
 
 # Internal crates
-netrunner-core = { path = "crates/netrunner-core", version = "2.0.5" }
+netrunner-core = { path = "crates/netrunner-core", version = "2.0.6" }
 
 # Dev
 tempfile = "3.8"
