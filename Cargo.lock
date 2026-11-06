@@ -4097,7 +4097,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "chrono",
  "futures",
@@ -4110,7 +4110,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner-core"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "bytes",
  "chrono",
@@ -4133,7 +4133,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner-web"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "futures",
  "netrunner-core",
@@ -4145,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner_cli"
-version = "2.0.7"
+version = "2.0.8"
 dependencies = [
  "chrono",
  "clap",

@@ -4,6 +4,12 @@ All notable changes to this project are documented here. It is generated from
 [Conventional Commits](https://www.conventionalcommits.org) by
 [git-cliff](https://git-cliff.org) — do not edit it by hand.
 
+## [2.0.8](https://github.com/sorinirimies/netrunner/compare/v2.0.7...v2.0.8) — 2026-11-06
+
+### 🔄 CI and release
+
+- **packages:** .deb and .rpm package names are valid Debian names (no underscores) ([`35f4858`](https://github.com/sorinirimies/netrunner/commit/35f4858d0ef39915875dd20902828f1c6421002c))
+
 ## [2.0.7](https://github.com/sorinirimies/netrunner/compare/v2.0.6...v2.0.7) — 2026-11-06
 
 ### 🔄 CI and release
