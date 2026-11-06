@@ -4,6 +4,12 @@ All notable changes to this project are documented here. It is generated from
 [Conventional Commits](https://www.conventionalcommits.org) by
 [git-cliff](https://git-cliff.org) — do not edit it by hand.
 
+## [2.0.7](https://github.com/sorinirimies/netrunner/compare/v2.0.6...v2.0.7) — 2026-11-06
+
+### 🔄 CI and release
+
+- **packages:** AppImages use the downloaded appimagetool; which also matched the script's own command ([`06749aa`](https://github.com/sorinirimies/netrunner/commit/06749aaf9bfbdc6db23249f43b46187f3773094e))
+
 ## [2.0.6](https://github.com/sorinirimies/netrunner/compare/v2.0.5...v2.0.6) — 2026-11-06
 
 ### 🐛 Bug fixes
