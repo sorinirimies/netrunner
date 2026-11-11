@@ -663,9 +663,9 @@ checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bit_field"
-version = "0.10.3"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e4b40c7323adcfc0a41c4b88143ed58346ff65a288fc144329c5c45e05d70c6"
+checksum = "cb2907cc03d08cdb1c6724ad0670ce67c4a71e1c45a6d7635224011714cfc4b1"
 
 [[package]]
 name = "bitflags"
@@ -1256,9 +1256,9 @@ dependencies = [
 
 [[package]]
 name = "const-oid"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+checksum = "be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a"
 
 [[package]]
 name = "const-random"
@@ -5691,9 +5691,9 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rust-embed"
-version = "8.13.0"
+version = "8.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19afa5b4b6a611de00bd1bdae6ae6f39084c9399f0679c3f52d8469cf335cc23"
+checksum = "e98f580cf7a2863aeb6827800283f52cbe6fb3f3bb7c1843783f903c16dcb8ad"
 dependencies = [
  "rust-embed-impl",
  "rust-embed-utils",
@@ -5702,9 +5702,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-impl"
-version = "8.13.0"
+version = "8.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0d8afda6374eac59e066abee06d265247ebbaf3006cf878e2879e8356e34053"
+checksum = "a93e2f69cf224a6c7df7509aa5ba4a23f56828ee41b040e92ac8762371eb9ba7"
 dependencies = [
  "mime_guess",
  "proc-macro2",
@@ -5716,9 +5716,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-utils"
-version = "8.13.0"
+version = "8.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d84e8ba78bd384263e5922f084cbe1b081c3b7e69add59c8fb097b879ba968a"
+checksum = "915e33dccbe7deb2b8a342dc4c517503fe85e0230ddbae40a4fb0220493dad9b"
 dependencies = [
  "globset",
  "sha2 0.11.1",
@@ -5810,9 +5810,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.15.1"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
+checksum = "102f35f7de7b06d8c61f1cff6592f5253e0dea431c74867aad5dfd70f44663fb"
 dependencies = [
  "web-time",
  "zeroize",
@@ -7679,9 +7679,9 @@ dependencies = [
 
 [[package]]
 name = "tui-chart"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76436d2db464669aefc06a01952af7e3b78049867419852bbc399d72f311fca"
+checksum = "baf142f70c58d539c5e870acdbd4436cd7ee2cc6f746598b108c85ad0b6836bd"
 dependencies = [
  "ratatui",
  "tui-nuances",
@@ -7701,9 +7701,9 @@ dependencies = [
 
 [[package]]
 name = "tui-file-explorer"
-version = "4.0.6"
+version = "4.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13a1e82351f518474565b36f0f5ff37a243c41fc54a1596eea29e3ea33bc15a5"
+checksum = "9da4d268c96557901ac492a89174e35d9f5cd6026097c3433b1b0c18674db3ee"
 dependencies = [
  "crossterm",
  "libc",
@@ -7714,9 +7714,9 @@ dependencies = [
 
 [[package]]
 name = "tui-nuances"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c4a0e7ec99c630f79977ab650c1a0ef6cc8fccc6077ebee36fc8aa0d329724f"
+checksum = "71a55e1ee7052a2409c91486005043da038bf44f72978a69747986dc64ca6068"
 dependencies = [
  "ratatui",
 ]
@@ -7733,9 +7733,9 @@ dependencies = [
 
 [[package]]
 name = "tui-rating"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbb227230fc727caf873981618bf6af4bce7d7adb0e55169cb6073f305d1fd76"
+checksum = "0c62531ac38966975dc14fbceb26ea5881c6137583105c94e904c8e58c3d9d34"
 dependencies = [
  "ratatui",
  "tui-nuances",
@@ -7743,9 +7743,9 @@ dependencies = [
 
 [[package]]
 name = "tui-slider"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c774d1c55e55b681c778b20e52c1ec4c4832d61f51c87e26b851132669cc255f"
+checksum = "22523fbf5e5d35f3651055e0dfe68c966b1e6ca8eb0cf65e9ed75910c76c1599"
 dependencies = [
  "ratatui",
  "tui-nuances",
@@ -7754,9 +7754,9 @@ dependencies = [
 
 [[package]]
 name = "tui-spinner"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "937930e920bac1061afa9b23835cd2b30160438c7fc8afc2f06b5605b56746d6"
+checksum = "6e63e09be3aa0d8ef868b44f764829949c5873884f42e2fce714a3439ae586a3"
 dependencies = [
  "ratatui",
  "tui-nuances",
@@ -8327,9 +8327,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
-version = "1.0.11"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e49d0e65abc00c142e8f9428da991da9f1a250c39be97459901eb12b9b49f62a"
+checksum = "293198dcebfb821155b5092ab94b5a82ff180eddd7241df3bd6e66a4ffd1a585"
 dependencies = [
  "rustls-pki-types",
 ]
