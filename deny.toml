@@ -3,6 +3,7 @@ yanked = "deny"
 # Unmaintained crates reached only through gpui 0.2.2, the latest release; netrunner
 # cannot replace them. Drop each entry once a gpui release moves off it.
 ignore = [
+    "RUSTSEC-2026-0543", # chrono unmaintained: direct/transitive dep, no drop-in replacement adopted yet
     # gpui_http_client (zed-async-tar, zed-reqwest, futures-lite 1).
     "RUSTSEC-2025-0052", # async-std discontinued
     "RUSTSEC-2025-0134", # rustls-pemfile unmaintained
